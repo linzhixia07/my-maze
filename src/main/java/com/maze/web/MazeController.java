@@ -4,7 +4,6 @@ import com.maze.game.Direction;
 import com.maze.game.GameState;
 import com.maze.game.MazePoint;
 import com.maze.game.MazeService;
-import com.maze.game.Player;
 import com.maze.game.PlayerId;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +21,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/maze")
 public class MazeController {
     private static final String SESSION_KEY = "maze-state";
+    private static final String SESSION_LEVEL_KEY = "maze-level";
     private final MazeService mazeService;
 
     public MazeController(MazeService mazeService) {
@@ -37,9 +37,12 @@ public class MazeController {
     public MazeResponse reset(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
         Integer cols = request == null ? null : request.getCols();
         Integer rows = request == null ? null : request.getRows();
-        GameState state = mazeService.generate(cols, rows);
+        Integer level = request == null ? null : request.getLevel();
+        GameState state = mazeService.generate(cols, rows, level);
+        int appliedLevel = mazeService.clampLevel(level);
         session.setAttribute(SESSION_KEY, state);
-        return MazeResponse.from(state, true, true, null);
+        session.setAttribute(SESSION_LEVEL_KEY, appliedLevel);
+        return MazeResponse.from(state, true, true, null, appliedLevel);
     }
 
     @PostMapping("/move")
@@ -56,7 +59,8 @@ public class MazeController {
         state.getLock().lock();
         try {
             MazeService.MoveResult moveResult = mazeService.tryMove(state, playerId, direction);
-            return MazeResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner());
+            Integer appliedLevel = (Integer) session.getAttribute(SESSION_LEVEL_KEY);
+            return MazeResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner(), appliedLevel);
         } finally {
             state.getLock().unlock();
         }
@@ -81,6 +85,7 @@ public class MazeController {
     public static class GenerateRequest {
         private Integer cols;
         private Integer rows;
+        private Integer level;
 
         public Integer getCols() {
             return cols;
@@ -96,6 +101,14 @@ public class MazeController {
 
         public void setRows(Integer rows) {
             this.rows = rows;
+        }
+
+        public Integer getLevel() {
+            return level;
+        }
+
+        public void setLevel(Integer level) {
+            this.level = level;
         }
     }
 
@@ -128,8 +141,10 @@ public class MazeController {
         private boolean moved;
         private boolean gameOver;
         private String winner;
+        private int level;
 
-        public static MazeResponse from(GameState state, boolean moved, boolean includeMaze, PlayerId winnerId) {
+        public static MazeResponse from(GameState state, boolean moved, boolean includeMaze, PlayerId winnerId,
+                                        Integer level) {
             MazeResponse response = new MazeResponse();
             response.maze = includeMaze ? state.getMaze() : null;
             response.goal = new PointDto(state.getGoal().getX(), state.getGoal().getY());
@@ -144,6 +159,7 @@ public class MazeController {
             response.gameOver = state.isGameOver();
             response.winner = winnerId == null && state.getWinner() != null ? state.getWinner().name()
                     : winnerId == null ? null : winnerId.name();
+            response.level = level == null ? MazeService.DEFAULT_LEVEL : level;
             return response;
         }
 
@@ -173,6 +189,10 @@ public class MazeController {
 
         public String getWinner() {
             return winner;
+        }
+
+        public int getLevel() {
+            return level;
         }
     }
 

@@ -5,18 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>双人迷宫竞技</title>
     <style>
+        :root {
+            --page-bg: #f4f6f9;
+            --canvas-bg: #f7fbff;
+            --text-main: #1f2933;
+            --label-color: #3f4957;
+            --input-border: #b7c2d0;
+            --canvas-border: #6d7786;
+            --badge-bg: rgba(255, 255, 255, 0.92);
+            --badge-text: #1f2933;
+            --btn-bg: #4caf50;
+            --btn-text: #fff;
+        }
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background: #f4f6f9;
+            background: var(--page-bg);
+            color: var(--text-main);
             display: flex;
             justify-content: center;
             padding: 16px;
+            min-height: 100vh;
+            box-sizing: border-box;
+            transition: background-color 0.45s ease, color 0.45s ease;
         }
         .game {
+            position: relative;
             width: 100%;
             max-width: 1100px;
             text-align: center;
+            padding-top: 40px;
+        }
+        .level-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: bold;
+            letter-spacing: 0.02em;
+            background: var(--badge-bg);
+            color: var(--badge-text);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            transition: background-color 0.45s ease, color 0.45s ease, border-color 0.45s ease;
         }
         .arena {
             display: flex;
@@ -32,24 +65,29 @@
             display: block;
             margin-bottom: 6px;
             font-size: 14px;
-            color: #3f4957;
+            color: var(--label-color);
             font-weight: bold;
+            transition: color 0.45s ease;
         }
         .player-panel input {
             width: 100%;
             box-sizing: border-box;
             padding: 8px 10px;
-            border: 1px solid #b7c2d0;
+            border: 1px solid var(--input-border);
             border-radius: 8px;
             font-size: 14px;
+            background: rgba(255, 255, 255, 0.85);
+            color: var(--text-main);
+            transition: border-color 0.45s ease, color 0.45s ease, background-color 0.45s ease;
         }
         canvas {
             width: 100%;
             max-width: 700px;
-            background: #f7fbff;
-            border: 3px solid #6d7786;
+            background: var(--canvas-bg);
+            border: 3px solid var(--canvas-border);
             border-radius: 12px;
             box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+            transition: background-color 0.45s ease, border-color 0.45s ease;
         }
         .panel {
             margin-top: 10px;
@@ -59,14 +97,16 @@
             border: none;
             border-radius: 8px;
             font-size: 17px;
-            background: #4caf50;
-            color: #fff;
+            background: var(--btn-bg);
+            color: var(--btn-text);
             cursor: pointer;
+            transition: background-color 0.45s ease, color 0.45s ease;
         }
     </style>
 </head>
 <body>
 <div class="game">
+    <div id="levelBadge" class="level-badge">Level: 4/5</div>
     <div class="arena">
         <div class="player-panel">
             <label for="playerAName">玩家 A 名字</label>
@@ -88,6 +128,97 @@
         var ctx = canvas.getContext("2d");
         var playerAInput = document.getElementById("playerAName");
         var playerBInput = document.getElementById("playerBName");
+        var levelBadge = document.getElementById("levelBadge");
+        var MAX_LEVEL = 5;
+        var currentLevel = 4;
+        var LEVEL_THEMES = {
+            1: {
+                cellRoad: "#fafcf8",
+                cellWall: "#c5e1a5",
+                wallStroke: "#8bc34a",
+                breadcrumbA: "rgba(46, 125, 50, 0.38)",
+                breadcrumbB: "rgba(198, 40, 40, 0.34)",
+                pageBg: "#e8f5e9",
+                canvasBg: "#f1f8e9",
+                textMain: "#1b2e1f",
+                labelColor: "#2e4a32",
+                inputBorder: "#a5d6a7",
+                canvasBorder: "#81c784",
+                badgeBg: "rgba(255, 255, 255, 0.95)",
+                badgeText: "#1b3d24",
+                btnBg: "#66bb6a",
+                btnText: "#fff"
+            },
+            2: {
+                cellRoad: "#fffef8",
+                cellWall: "#ffe082",
+                wallStroke: "#ffb74d",
+                breadcrumbA: "rgba(25, 118, 210, 0.36)",
+                breadcrumbB: "rgba(211, 47, 47, 0.34)",
+                pageBg: "#fff8e1",
+                canvasBg: "#fffde7",
+                textMain: "#4e342e",
+                labelColor: "#5d4037",
+                inputBorder: "#ffcc80",
+                canvasBorder: "#ffa726",
+                badgeBg: "rgba(255, 253, 240, 0.96)",
+                badgeText: "#4e342e",
+                btnBg: "#fb8c00",
+                btnText: "#fff"
+            },
+            3: {
+                cellRoad: "#f5feff",
+                cellWall: "#b2ebf2",
+                wallStroke: "#4dd0e1",
+                breadcrumbA: "rgba(2, 119, 189, 0.36)",
+                breadcrumbB: "rgba(229, 57, 53, 0.34)",
+                pageBg: "#e0f7fa",
+                canvasBg: "#f0fcff",
+                textMain: "#1a3440",
+                labelColor: "#2c5364",
+                inputBorder: "#80deea",
+                canvasBorder: "#26c6da",
+                badgeBg: "rgba(255, 255, 255, 0.94)",
+                badgeText: "#0d3c4a",
+                btnBg: "#26c6da",
+                btnText: "#fff"
+            },
+            4: {
+                cellRoad: "#f6fbff",
+                cellWall: "#d7dee7",
+                wallStroke: "#5b6672",
+                breadcrumbA: "rgba(47, 128, 237, 0.38)",
+                breadcrumbB: "rgba(235, 87, 87, 0.38)",
+                pageBg: "#f4f6f9",
+                canvasBg: "#f7fbff",
+                textMain: "#1f2933",
+                labelColor: "#3f4957",
+                inputBorder: "#b7c2d0",
+                canvasBorder: "#6d7786",
+                badgeBg: "rgba(255, 255, 255, 0.92)",
+                badgeText: "#1f2933",
+                btnBg: "#4caf50",
+                btnText: "#fff"
+            },
+            5: {
+                cellRoad: "#1c2636",
+                cellWall: "#2d3a4d",
+                wallStroke: "#5c6b7e",
+                breadcrumbA: "rgba(100, 181, 246, 0.45)",
+                breadcrumbB: "rgba(239, 83, 80, 0.45)",
+                pageBg: "#0d1117",
+                canvasBg: "#151d2a",
+                textMain: "#eceff1",
+                labelColor: "#cfd8dc",
+                inputBorder: "#455a64",
+                canvasBorder: "#546e7a",
+                badgeBg: "rgba(30, 40, 55, 0.92)",
+                badgeText: "#eceff1",
+                btnBg: "#5c6bc0",
+                btnText: "#fff"
+            }
+        };
+        var activeTheme = LEVEL_THEMES[4];
         var maze = [];
         var players = {};
         var goal = null;
@@ -113,11 +244,31 @@
         };
 
         function init() {
-            document.getElementById("resetBtn").addEventListener("click", generateMaze);
+            document.getElementById("resetBtn").addEventListener("click", function () {
+                generateMaze(false);
+            });
             window.addEventListener("keydown", onKeyDown);
             window.addEventListener("keyup", onKeyUp);
             startMoveLoop();
-            generateMaze();
+            applyLevelTheme(currentLevel);
+            generateMaze(true);
+        }
+
+        function applyLevelTheme(level) {
+            var lv = level < 1 ? 1 : (level > MAX_LEVEL ? MAX_LEVEL : level);
+            activeTheme = LEVEL_THEMES[lv] || LEVEL_THEMES[4];
+            var root = document.documentElement;
+            root.style.setProperty("--page-bg", activeTheme.pageBg);
+            root.style.setProperty("--canvas-bg", activeTheme.canvasBg);
+            root.style.setProperty("--text-main", activeTheme.textMain);
+            root.style.setProperty("--label-color", activeTheme.labelColor);
+            root.style.setProperty("--input-border", activeTheme.inputBorder);
+            root.style.setProperty("--canvas-border", activeTheme.canvasBorder);
+            root.style.setProperty("--badge-bg", activeTheme.badgeBg);
+            root.style.setProperty("--badge-text", activeTheme.badgeText);
+            root.style.setProperty("--btn-bg", activeTheme.btnBg);
+            root.style.setProperty("--btn-text", activeTheme.btnText);
+            levelBadge.textContent = "Level: " + lv + "/" + MAX_LEVEL;
         }
 
         function onKeyDown(event) {
@@ -171,14 +322,18 @@
             return null;
         }
 
-        function generateMaze() {
+        function generateMaze(skipLevelIncrement) {
+            if (!skipLevelIncrement) {
+                currentLevel = currentLevel >= MAX_LEVEL ? 1 : currentLevel + 1;
+            }
+            applyLevelTheme(currentLevel);
             inputLocked = false;
             winnerMessage = "";
             keyPressed = {};
             fetch("/api/maze/generate", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({cols: 21, rows: 21})
+                body: JSON.stringify({level: currentLevel})
             })
             .then(parseJson)
             .then(applyState)
@@ -204,6 +359,10 @@
         }
 
         function applyState(data) {
+            if (typeof data.level === "number") {
+                currentLevel = data.level;
+                applyLevelTheme(currentLevel);
+            }
             if (data.maze) {
                 maze = data.maze;
             }
@@ -228,7 +387,7 @@
             var cols = maze[0].length;
             cellSize = Math.floor(Math.min(canvas.width / cols, canvas.height / rows));
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "#f4f8fc";
+            ctx.fillStyle = activeTheme.canvasBg;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             for (var y = 0; y < rows; y++) {
@@ -245,12 +404,12 @@
 
         function drawCell(x, y, value) {
             var isWall = (value & 2) === 2;
-            ctx.fillStyle = isWall ? "#d7dee7" : "#f6fbff";
+            ctx.fillStyle = isWall ? activeTheme.cellWall : activeTheme.cellRoad;
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         }
 
         function drawWallOutline() {
-            ctx.strokeStyle = "#5b6672";
+            ctx.strokeStyle = activeTheme.wallStroke;
             ctx.lineWidth = 1;
             for (var y = 0; y < maze.length; y++) {
                 for (var x = 0; x < maze[0].length; x++) {
@@ -264,8 +423,8 @@
         }
 
         function drawBreadcrumbs() {
-            drawPlayerBreadcrumb("A", "rgba(47,128,237,0.38)");
-            drawPlayerBreadcrumb("B", "rgba(235,87,87,0.38)");
+            drawPlayerBreadcrumb("A", activeTheme.breadcrumbA);
+            drawPlayerBreadcrumb("B", activeTheme.breadcrumbB);
         }
 
         function drawPlayerBreadcrumb(playerId, color) {

@@ -5,8 +5,10 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 
@@ -16,20 +18,66 @@ public class MazeService {
     private static final int DEFAULT_ROWS = 21;
     private static final int MIN_SIZE = 11;
     private static final int MAX_SIZE = 29;
+    public static final int MIN_LEVEL = 1;
+    public static final int MAX_LEVEL = 5;
+    public static final int DEFAULT_LEVEL = 4;
     private static final int MAX_RETRY = 300;
     private static final double FAIRNESS_THRESHOLD = 0.15d;
+    /**
+     * Canonical difficulty tiers: grid size and carving biases (branching / path winding).
+     * Level 4 matches the historic stable release (21×21 logical cells and prior tuning).
+     */
+    private static final Map<Integer, MazeLevelProfile> LEVEL_PROFILES_BY_NUMBER;
+
+    static {
+        Map<Integer, MazeLevelProfile> table = new HashMap<Integer, MazeLevelProfile>();
+        table.put(1, new MazeLevelProfile(11, 11, 12, 4, 9, 0.06d, 95));
+        table.put(2, new MazeLevelProfile(15, 15, 22, 6, 14, 0.12d, 95));
+        table.put(3, new MazeLevelProfile(19, 19, 38, 8, 22, 0.20d, 95));
+        table.put(4, new MazeLevelProfile(21, 21, 48, 10, 28, 0.28d, 95));
+        table.put(5, new MazeLevelProfile(29, 29, 62, 10, 38, 0.42d, 95));
+        LEVEL_PROFILES_BY_NUMBER = Collections.unmodifiableMap(table);
+    }
+
     private final Random random = new SecureRandom();
 
+    public int clampLevel(Integer level) {
+        if (level == null) {
+            return DEFAULT_LEVEL;
+        }
+        int value = level;
+        if (value < MIN_LEVEL) {
+            return MIN_LEVEL;
+        }
+        if (value > MAX_LEVEL) {
+            return MAX_LEVEL;
+        }
+        return value;
+    }
+
     public GameState generate(Integer requestedCols, Integer requestedRows) {
-        int cols = normalizeSize(requestedCols, DEFAULT_COLS);
-        int rows = normalizeSize(requestedRows, DEFAULT_ROWS);
+        return generate(requestedCols, requestedRows, null);
+    }
+
+    public GameState generate(Integer requestedCols, Integer requestedRows, Integer level) {
+        MazeLevelProfile profile;
+        if (level != null) {
+            int resolved = clampLevel(level);
+            profile = LEVEL_PROFILES_BY_NUMBER.get(resolved);
+        } else {
+            int cols = normalizeSize(requestedCols, DEFAULT_COLS);
+            int rows = normalizeSize(requestedRows, DEFAULT_ROWS);
+            profile = LEVEL_PROFILES_BY_NUMBER.get(DEFAULT_LEVEL).withLogicalGrid(cols, rows);
+        }
+        int cols = profile.getLogicalCols();
+        int rows = profile.getLogicalRows();
         int width = cols * 2 + 1;
         int height = rows * 2 + 1;
         int middleY = height / 2;
         for (int i = 0; i < MAX_RETRY; i++) {
             int[][] maze = createMazeBuffer(width, height);
             boolean[][] visited = new boolean[rows][cols];
-            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null);
+            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, profile);
             if (!allLogicalCellsVisited(visited)) {
                 continue;
             }
@@ -127,13 +175,13 @@ public class MazeService {
     }
 
     private void carveByRecursiveBacktracking(int cellX, int cellY, boolean[][] visited, int[][] maze,
-                                              Direction previousDirection) {
+                                              Direction previousDirection, MazeLevelProfile profile) {
         visited[cellY][cellX] = true;
         int mazeX = cellX * 2 + 1;
         int mazeY = cellY * 2 + 1;
         maze[mazeY][mazeX] = MazeCellState.ROAD;
 
-        List<Direction> directions = buildDirections(previousDirection, random.nextInt(4));
+        List<Direction> directions = buildDirections(previousDirection, random.nextInt(4), profile);
         for (Direction direction : directions) {
             int nextCellX = cellX + direction.getDx();
             int nextCellY = cellY + direction.getDy();
@@ -149,7 +197,7 @@ public class MazeService {
             }
             maze[wallY][wallX] = MazeCellState.ROAD;
             maze[nextMazeY][nextMazeX] = MazeCellState.ROAD;
-            carveByRecursiveBacktracking(nextCellX, nextCellY, visited, maze, direction);
+            carveByRecursiveBacktracking(nextCellX, nextCellY, visited, maze, direction, profile);
         }
     }
 
@@ -222,7 +270,7 @@ public class MazeService {
         return y >= 0 && y < visited.length && x >= 0 && x < visited[0].length;
     }
 
-    private List<Direction> buildDirections(Direction previousDirection, int straightBonus) {
+    private List<Direction> buildDirections(Direction previousDirection, int straightBonus, MazeLevelProfile profile) {
         List<Direction> directions = new ArrayList<Direction>();
         directions.add(Direction.UP);
         directions.add(Direction.DOWN);
@@ -232,22 +280,22 @@ public class MazeService {
         if (previousDirection == null) {
             return directions;
         }
-        // Strongly prefer turns: more zig-zags and side branches (misleading dead ends) for younger players.
         directions.sort((a, b) -> Integer.compare(
-                scoreDirection(b, previousDirection, straightBonus),
-                scoreDirection(a, previousDirection, straightBonus)));
-        if (random.nextDouble() < 0.28d) {
+                scoreDirection(b, previousDirection, straightBonus, profile),
+                scoreDirection(a, previousDirection, straightBonus, profile)));
+        if (random.nextDouble() < profile.getPostShuffleSwapProbability()) {
             Collections.swap(directions, 0, 1 + random.nextInt(Math.min(3, directions.size() - 1)));
         }
         return directions;
     }
 
-    private int scoreDirection(Direction candidate, Direction previousDirection, int straightBonus) {
-        int score = random.nextInt(95);
+    private int scoreDirection(Direction candidate, Direction previousDirection, int straightBonus,
+                               MazeLevelProfile profile) {
+        int score = random.nextInt(profile.getScoreJitterExclusiveMax());
         if (candidate == previousDirection) {
-            score -= 48 + straightBonus * 10;
+            score -= profile.getStraightContinuationDeduction() + straightBonus * profile.getStraightBonusMultiplier();
         } else {
-            score += 28;
+            score += profile.getTurnExploreBonus();
         }
         return score;
     }
