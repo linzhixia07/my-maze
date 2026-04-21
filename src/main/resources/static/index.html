@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>儿童迷宫乐园</title>
+    <title>双人迷宫竞技</title>
     <style>
         body {
             margin: 0;
-            font-family: "Arial", sans-serif;
-            background: #fffbe6;
-            color: #2f4858;
+            font-family: Arial, sans-serif;
+            background: #f4f6f9;
             display: flex;
             justify-content: center;
             padding: 16px;
@@ -22,110 +21,163 @@
         canvas {
             width: 100%;
             max-width: 700px;
-            background: #ffffff;
-            border: 6px solid #6c63ff;
-            border-radius: 14px;
-            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+            background: #f7fbff;
+            border: 3px solid #6d7786;
+            border-radius: 12px;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
         }
         .panel {
-            margin-top: 12px;
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            flex-wrap: wrap;
+            margin-top: 10px;
         }
         button {
-            padding: 12px 18px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 10px;
-            font-size: 18px;
+            border-radius: 8px;
+            font-size: 17px;
             background: #4caf50;
             color: #fff;
             cursor: pointer;
         }
-        button:active {
-            transform: scale(0.98);
+        .winner-banner {
+            min-height: 34px;
+            margin-top: 10px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #ff5d3d;
         }
     </style>
 </head>
 <body>
 <div class="game">
     <canvas id="mazeCanvas" width="700" height="700"></canvas>
+    <div class="panel">
+        <button id="resetBtn">重置迷宫</button>
+    </div>
+    <div id="winnerBanner" class="winner-banner"></div>
 </div>
-
 <script>
     (function () {
         var canvas = document.getElementById("mazeCanvas");
         var ctx = canvas.getContext("2d");
+        var winnerBanner = document.getElementById("winnerBanner");
         var maze = [];
         var players = {};
         var goal = null;
         var breadcrumbs = {};
-        var cellSize = 40;
+        var cellSize = 24;
+        var inputLocked = false;
+        var keyPressed = {};
+        var moveLoopId = null;
+        var keyMapping = {
+            w: {playerId: "A", direction: "UP"},
+            W: {playerId: "A", direction: "UP"},
+            s: {playerId: "A", direction: "DOWN"},
+            S: {playerId: "A", direction: "DOWN"},
+            a: {playerId: "A", direction: "LEFT"},
+            A: {playerId: "A", direction: "LEFT"},
+            d: {playerId: "A", direction: "RIGHT"},
+            D: {playerId: "A", direction: "RIGHT"},
+            ArrowUp: {playerId: "B", direction: "UP"},
+            ArrowDown: {playerId: "B", direction: "DOWN"},
+            ArrowLeft: {playerId: "B", direction: "LEFT"},
+            ArrowRight: {playerId: "B", direction: "RIGHT"}
+        };
 
         function init() {
-            generateMaze();
+            document.getElementById("resetBtn").addEventListener("click", generateMaze);
             window.addEventListener("keydown", onKeyDown);
+            window.addEventListener("keyup", onKeyUp);
+            startMoveLoop();
+            generateMaze();
         }
 
         function onKeyDown(event) {
-            var mapping = {
-                ArrowUp: {playerId: "A", direction: "UP"},
-                ArrowDown: {playerId: "A", direction: "DOWN"},
-                ArrowLeft: {playerId: "A", direction: "LEFT"},
-                ArrowRight: {playerId: "A", direction: "RIGHT"},
-                w: {playerId: "B", direction: "UP"},
-                W: {playerId: "B", direction: "UP"},
-                s: {playerId: "B", direction: "DOWN"},
-                S: {playerId: "B", direction: "DOWN"},
-                a: {playerId: "B", direction: "LEFT"},
-                A: {playerId: "B", direction: "LEFT"},
-                d: {playerId: "B", direction: "RIGHT"},
-                D: {playerId: "B", direction: "RIGHT"}
-            };
-            var action = mapping[event.key];
-            if (action) {
+            if (keyMapping[event.key]) {
                 event.preventDefault();
-                move(action.playerId, action.direction);
-                return;
+                keyPressed[event.key] = true;
             }
-            if (event.key === "r" || event.key === "R") {
-                event.preventDefault();
-                generateMaze();
+        }
+
+        function onKeyUp(event) {
+            if (keyPressed[event.key]) {
+                keyPressed[event.key] = false;
             }
+        }
+
+        function startMoveLoop() {
+            if (moveLoopId) {
+                clearInterval(moveLoopId);
+            }
+            moveLoopId = setInterval(function () {
+                if (inputLocked) {
+                    return;
+                }
+                var actionA = currentDirectionForPlayer("A");
+                var actionB = currentDirectionForPlayer("B");
+                if (!actionA && !actionB) {
+                    return;
+                }
+                if (actionA && actionB) {
+                    Promise.all([move(actionA), move(actionB)]).catch(function () {});
+                } else if (actionA) {
+                    move(actionA);
+                } else {
+                    move(actionB);
+                }
+            }, 95);
+        }
+
+        function currentDirectionForPlayer(playerId) {
+            var keys = playerId === "A"
+                ? ["w", "W", "s", "S", "a", "A", "d", "D"]
+                : ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+            for (var i = 0; i < keys.length; i++) {
+                if (keyPressed[keys[i]]) {
+                    return keyMapping[keys[i]];
+                }
+            }
+            return null;
         }
 
         function generateMaze() {
-            fetch("/api/maze/generate", {
+            inputLocked = false;
+            keyPressed = {};
+            winnerBanner.textContent = "";
+            fetch("/api/maze/reset", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({cols: 25, rows: 25})
+                body: JSON.stringify({cols: 21, rows: 21})
+            })
+            .then(parseJson)
+            .then(applyState)
+            .catch(function () {});
+        }
+
+        function move(action) {
+            return fetch("/api/maze/move", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({playerId: action.playerId, direction: action.direction})
             })
             .then(parseJson)
             .then(function (data) {
-                maze = data.maze;
-                players = data.players || {};
-                goal = data.goal;
-                breadcrumbs = data.breadcrumbs || {};
-                render();
+                applyState(data);
+                if (data.gameOver) {
+                    inputLocked = true;
+                    winnerBanner.textContent = "玩家 " + data.winner + " 获胜！";
+                }
             })
             .catch(function () {});
         }
 
-        function move(playerId, direction) {
-            fetch("/api/maze/move", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({playerId: playerId, direction: direction})
-            })
-            .then(parseJson)
-            .then(function (data) {
-                players = data.players || {};
-                goal = data.goal;
-                breadcrumbs = data.breadcrumbs || {};
-                render();
-            })
-            .catch(function () {});
+        function applyState(data) {
+            if (data.maze) {
+                maze = data.maze;
+            }
+            players = data.players || {};
+            goal = data.goal;
+            breadcrumbs = data.breadcrumbs || {};
+            render();
         }
 
         function parseJson(response) {
@@ -143,6 +195,8 @@
             var cols = maze[0].length;
             cellSize = Math.floor(Math.min(canvas.width / cols, canvas.height / rows));
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#f4f8fc";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             for (var y = 0; y < rows; y++) {
                 for (var x = 0; x < cols; x++) {
@@ -150,19 +204,34 @@
                 }
             }
             drawBreadcrumbs();
+            drawWallOutline();
             drawGoal();
             drawPlayers();
         }
 
         function drawCell(x, y, value) {
             var isWall = (value & 2) === 2;
-            ctx.fillStyle = isWall ? "#3a3a3a" : "#e8f7ff";
+            ctx.fillStyle = isWall ? "#d7dee7" : "#f6fbff";
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         }
 
+        function drawWallOutline() {
+            ctx.strokeStyle = "#5b6672";
+            ctx.lineWidth = 1;
+            for (var y = 0; y < maze.length; y++) {
+                for (var x = 0; x < maze[0].length; x++) {
+                    if ((maze[y][x] & 2) === 2) {
+                        ctx.beginPath();
+                        ctx.rect(x * cellSize + 0.5, y * cellSize + 0.5, cellSize - 1, cellSize - 1);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
         function drawBreadcrumbs() {
-            drawPlayerBreadcrumb("A", "rgba(47,128,237,0.45)");
-            drawPlayerBreadcrumb("B", "rgba(235,87,87,0.45)");
+            drawPlayerBreadcrumb("A", "rgba(47,128,237,0.38)");
+            drawPlayerBreadcrumb("B", "rgba(235,87,87,0.38)");
         }
 
         function drawPlayerBreadcrumb(playerId, color) {
@@ -171,7 +240,7 @@
             for (var i = 0; i < path.length; i++) {
                 var p = path[i];
                 ctx.beginPath();
-                ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 8.5, 0, Math.PI * 2);
+                ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 8, 0, Math.PI * 2);
                 ctx.fill();
             }
         }

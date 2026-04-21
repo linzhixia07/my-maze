@@ -30,6 +30,11 @@ public class MazeController {
 
     @PostMapping("/generate")
     public MazeResponse generate(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
+        return reset(request, session);
+    }
+
+    @PostMapping("/reset")
+    public MazeResponse reset(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
         Integer cols = request == null ? null : request.getCols();
         Integer rows = request == null ? null : request.getRows();
         GameState state = mazeService.generate(cols, rows);

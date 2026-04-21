@@ -12,11 +12,13 @@ import java.util.Random;
 
 @Service
 public class MazeService {
-    private static final int DEFAULT_COLS = 15;
-    private static final int DEFAULT_ROWS = 15;
-    private static final int MIN_SIZE = 9;
-    private static final int MAX_SIZE = 21;
-    private static final double ROOM_CHANCE = 0.16d;
+    private static final int DEFAULT_COLS = 21;
+    private static final int DEFAULT_ROWS = 21;
+    private static final int MIN_SIZE = 11;
+    private static final int MAX_SIZE = 29;
+    private static final int MAX_RETRY = 120;
+    private static final double ROOM_CHANCE = 0.12d;
+    private static final double FAIRNESS_THRESHOLD = 0.15d;
     private final Random random = new SecureRandom();
 
     public GameState generate(Integer requestedCols, Integer requestedRows) {
@@ -24,36 +26,35 @@ public class MazeService {
         int rows = normalizeSize(requestedRows, DEFAULT_ROWS);
         int width = cols * 2 + 1;
         int height = rows * 2 + 1;
-        int[][] maze = createMazeBuffer(width, height);
-        int centerCellX = cols / 2;
-        int centerCellY = rows / 2;
-        int leftCellMaxX = centerCellX - 1;
-        boolean[][] visitedLeft = new boolean[rows][centerCellX];
-        carveLeftHalf(0, centerCellY, visitedLeft, maze, leftCellMaxX, null);
-        mirrorCenterSymmetry(maze);
+        for (int i = 0; i < MAX_RETRY; i++) {
+            int[][] maze = createMazeBuffer(width, height);
+            boolean[][] visited = new boolean[rows][cols];
+            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null);
 
-        int centerX = width / 2;
-        int centerY = height / 2;
-        maze[centerY][centerX] = MazeCellState.ROAD;
-        maze[centerY][centerX - 1] = MazeCellState.ROAD;
-        maze[centerY][centerX + 1] = MazeCellState.ROAD;
-        maze[centerY][centerX - 2] = MazeCellState.ROAD;
-        maze[centerY][centerX + 2] = MazeCellState.ROAD;
+            MazePoint goal = new MazePoint(width / 2, height / 2);
+            maze[goal.getY()][goal.getX()] = MazeCellState.ROAD;
 
-        MazePoint goal = new MazePoint(centerX, centerY);
-        MazePoint startA = new MazePoint(0, centerY);
-        MazePoint startB = new MazePoint(width - 1, centerY);
-        maze[startA.getY()][startA.getX()] = MazeCellState.ROAD;
-        maze[startB.getY()][startB.getX()] = MazeCellState.ROAD;
-        maze[centerY][1] = MazeCellState.ROAD;
-        maze[centerY][width - 2] = MazeCellState.ROAD;
+            Integer startAY = findEntryYNearMiddle(maze, true);
+            Integer startBY = findEntryYNearMiddle(maze, false);
+            if (startAY == null || startBY == null) {
+                continue;
+            }
 
-        int distanceA = bfsShortestDistance(maze, startA, goal);
-        int distanceB = bfsShortestDistance(maze, startB, goal);
-        if (distanceA <= 0 || distanceA != distanceB) {
-            return generate(requestedCols, requestedRows);
+            maze[startAY][0] = MazeCellState.ROAD;
+            maze[startAY][1] = MazeCellState.ROAD;
+            maze[startBY][width - 1] = MazeCellState.ROAD;
+            maze[startBY][width - 2] = MazeCellState.ROAD;
+
+            MazePoint startA = new MazePoint(0, startAY);
+            MazePoint startB = new MazePoint(width - 1, startBY);
+            int distanceA = bfsShortestDistance(maze, startA, goal);
+            int distanceB = bfsShortestDistance(maze, startB, goal);
+            if (!isFair(distanceA, distanceB)) {
+                continue;
+            }
+            return new GameState(maze, goal, startA, startB);
         }
-        return new GameState(maze, goal, startA, startB);
+        throw new IllegalStateException("Unable to generate fair maze.");
     }
 
     public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction) {
@@ -128,18 +129,18 @@ public class MazeService {
         return y >= 0 && y < maze.length && x >= 0 && x < maze[0].length;
     }
 
-    private void carveLeftHalf(int cellX, int cellY, boolean[][] visitedLeft, int[][] maze,
-                               int leftCellMaxX, Direction previousDirection) {
-        visitedLeft[cellY][cellX] = true;
+    private void carveByRecursiveBacktracking(int cellX, int cellY, boolean[][] visited, int[][] maze,
+                                              Direction previousDirection) {
+        visited[cellY][cellX] = true;
         int mazeX = cellX * 2 + 1;
         int mazeY = cellY * 2 + 1;
         maze[mazeY][mazeX] = MazeCellState.ROAD;
 
-        List<Direction> directions = buildDirections(previousDirection);
+        List<Direction> directions = buildDirections(previousDirection, random.nextInt(3));
         for (Direction direction : directions) {
             int nextCellX = cellX + direction.getDx();
             int nextCellY = cellY + direction.getDy();
-            if (!isInsideLeftCell(nextCellX, nextCellY, visitedLeft, leftCellMaxX) || visitedLeft[nextCellY][nextCellX]) {
+            if (!isInsideCell(nextCellX, nextCellY, visited) || visited[nextCellY][nextCellX]) {
                 continue;
             }
             int wallX = mazeX + direction.getDx();
@@ -149,23 +150,7 @@ public class MazeService {
             maze[wallY][wallX] = MazeCellState.ROAD;
             maze[nextMazeY][nextMazeX] = MazeCellState.ROAD;
             maybeCreateRoom(maze, wallX, wallY, direction);
-            carveLeftHalf(nextCellX, nextCellY, visitedLeft, maze, leftCellMaxX, direction);
-        }
-    }
-
-    private void mirrorCenterSymmetry(int[][] maze) {
-        int height = maze.length;
-        int width = maze[0].length;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int mirrorX = width - 1 - x;
-                int mirrorY = height - 1 - y;
-                if ((maze[y][x] & MazeCellState.WALL) == MazeCellState.WALL) {
-                    maze[mirrorY][mirrorX] = MazeCellState.WALL;
-                } else {
-                    maze[mirrorY][mirrorX] = MazeCellState.ROAD;
-                }
-            }
+            carveByRecursiveBacktracking(nextCellX, nextCellY, visited, maze, direction);
         }
     }
 
@@ -194,11 +179,11 @@ public class MazeService {
         maze[sy2][sx2] = MazeCellState.ROAD;
     }
 
-    private boolean isInsideLeftCell(int x, int y, boolean[][] visitedLeft, int leftCellMaxX) {
-        return y >= 0 && y < visitedLeft.length && x >= 0 && x <= leftCellMaxX;
+    private boolean isInsideCell(int x, int y, boolean[][] visited) {
+        return y >= 0 && y < visited.length && x >= 0 && x < visited[0].length;
     }
 
-    private List<Direction> buildDirections(Direction previousDirection) {
+    private List<Direction> buildDirections(Direction previousDirection, int straightBonus) {
         List<Direction> directions = new ArrayList<Direction>();
         directions.add(Direction.UP);
         directions.add(Direction.DOWN);
@@ -209,18 +194,45 @@ public class MazeService {
             return directions;
         }
         // Prefer turns to reduce very long straight channels.
-        directions.sort((a, b) -> Integer.compare(scoreDirection(b, previousDirection), scoreDirection(a, previousDirection)));
+        directions.sort((a, b) -> Integer.compare(
+                scoreDirection(b, previousDirection, straightBonus),
+                scoreDirection(a, previousDirection, straightBonus)));
         return directions;
     }
 
-    private int scoreDirection(Direction candidate, Direction previousDirection) {
+    private int scoreDirection(Direction candidate, Direction previousDirection, int straightBonus) {
         int score = random.nextInt(50);
         if (candidate == previousDirection) {
-            score -= 20;
+            score -= 20 + straightBonus * 3;
         } else {
             score += 20;
         }
         return score;
+    }
+
+    private Integer findEntryYNearMiddle(int[][] maze, boolean leftSide) {
+        int middleY = maze.length / 2;
+        int nearX = leftSide ? 1 : maze[0].length - 2;
+        for (int offset = 0; offset < maze.length; offset++) {
+            int up = middleY - offset;
+            int down = middleY + offset;
+            if (up >= 1 && up < maze.length - 1 && (maze[up][nearX] & MazeCellState.WALL) != MazeCellState.WALL) {
+                return up;
+            }
+            if (down >= 1 && down < maze.length - 1 && (maze[down][nearX] & MazeCellState.WALL) != MazeCellState.WALL) {
+                return down;
+            }
+        }
+        return null;
+    }
+
+    private boolean isFair(int distanceA, int distanceB) {
+        if (distanceA <= 0 || distanceB <= 0) {
+            return false;
+        }
+        int max = Math.max(distanceA, distanceB);
+        int diff = Math.abs(distanceA - distanceB);
+        return diff <= Math.ceil(max * FAIRNESS_THRESHOLD);
     }
 
     private int bfsShortestDistance(int[][] maze, MazePoint start, MazePoint goal) {
