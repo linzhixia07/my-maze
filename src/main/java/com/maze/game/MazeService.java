@@ -16,8 +16,7 @@ public class MazeService {
     private static final int DEFAULT_ROWS = 21;
     private static final int MIN_SIZE = 11;
     private static final int MAX_SIZE = 29;
-    private static final int MAX_RETRY = 120;
-    private static final double ROOM_CHANCE = 0.12d;
+    private static final int MAX_RETRY = 300;
     private static final double FAIRNESS_THRESHOLD = 0.15d;
     private final Random random = new SecureRandom();
 
@@ -31,11 +30,17 @@ public class MazeService {
             int[][] maze = createMazeBuffer(width, height);
             boolean[][] visited = new boolean[rows][cols];
             carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null);
+            if (!allLogicalCellsVisited(visited)) {
+                continue;
+            }
 
             MazePoint goal = new MazePoint(width / 2, height / 2);
             maze[goal.getY()][goal.getX()] = MazeCellState.ROAD;
             applyBoundaryLockdown(maze);
             openEntriesAtMiddle(maze, middleY);
+            if (wouldCreateWideOpenCorridor(maze)) {
+                continue;
+            }
 
             MazePoint startA = new MazePoint(0, middleY);
             MazePoint startB = new MazePoint(width - 1, middleY);
@@ -128,7 +133,7 @@ public class MazeService {
         int mazeY = cellY * 2 + 1;
         maze[mazeY][mazeX] = MazeCellState.ROAD;
 
-        List<Direction> directions = buildDirections(previousDirection, random.nextInt(3));
+        List<Direction> directions = buildDirections(previousDirection, random.nextInt(4));
         for (Direction direction : directions) {
             int nextCellX = cellX + direction.getDx();
             int nextCellY = cellY + direction.getDy();
@@ -139,39 +144,78 @@ public class MazeService {
             int wallY = mazeY + direction.getDy();
             int nextMazeX = nextCellX * 2 + 1;
             int nextMazeY = nextCellY * 2 + 1;
+            if (!canOpenConnector(maze, wallX, wallY, nextMazeX, nextMazeY)) {
+                continue;
+            }
             maze[wallY][wallX] = MazeCellState.ROAD;
             maze[nextMazeY][nextMazeX] = MazeCellState.ROAD;
-            maybeCreateRoom(maze, wallX, wallY, direction);
             carveByRecursiveBacktracking(nextCellX, nextCellY, visited, maze, direction);
         }
     }
 
-    private void maybeCreateRoom(int[][] maze, int wallX, int wallY, Direction direction) {
-        if (random.nextDouble() > ROOM_CHANCE) {
-            return;
+    /**
+     * Before carving a connector, simulate opening the wall cell and the next cell center.
+     * Rejects if that would create a solid 2x2 or 2x3 block of traversable cells (path wider than one cell).
+     */
+    private boolean canOpenConnector(int[][] maze, int wallX, int wallY, int nextMazeX, int nextMazeY) {
+        if (!isInside(wallX, wallY, maze) || !isInside(nextMazeX, nextMazeY, maze)) {
+            return false;
         }
-        List<Direction> sideDirections = new ArrayList<Direction>();
-        if (direction == Direction.UP || direction == Direction.DOWN) {
-            sideDirections.add(Direction.LEFT);
-            sideDirections.add(Direction.RIGHT);
-        } else {
-            sideDirections.add(Direction.UP);
-            sideDirections.add(Direction.DOWN);
+        int oldWall = maze[wallY][wallX];
+        int oldNext = maze[nextMazeY][nextMazeX];
+        maze[wallY][wallX] = MazeCellState.ROAD;
+        maze[nextMazeY][nextMazeX] = MazeCellState.ROAD;
+        boolean ok = !wouldCreateWideOpenCorridor(maze);
+        maze[wallY][wallX] = oldWall;
+        maze[nextMazeY][nextMazeX] = oldNext;
+        return ok;
+    }
+
+    private boolean wouldCreateWideOpenCorridor(int[][] maze) {
+        int h = maze.length;
+        int w = maze[0].length;
+        for (int y = 0; y < h - 1; y++) {
+            for (int x = 0; x < w - 1; x++) {
+                if (isTraversable(maze, x, y) && isTraversable(maze, x + 1, y)
+                        && isTraversable(maze, x, y + 1) && isTraversable(maze, x + 1, y + 1)) {
+                    return true;
+                }
+            }
         }
-        Collections.shuffle(sideDirections, random);
-        Direction side = sideDirections.get(0);
-        int sx = wallX + side.getDx();
-        int sy = wallY + side.getDy();
-        int sx2 = sx + direction.getDx();
-        int sy2 = sy + direction.getDy();
-        if (!isInside(sx, sy, maze) || !isInside(sx2, sy2, maze)) {
-            return;
+        for (int y = 0; y < h - 1; y++) {
+            for (int x = 0; x < w - 2; x++) {
+                if (isTraversable(maze, x, y) && isTraversable(maze, x + 1, y) && isTraversable(maze, x + 2, y)
+                        && isTraversable(maze, x, y + 1) && isTraversable(maze, x + 1, y + 1)
+                        && isTraversable(maze, x + 2, y + 1)) {
+                    return true;
+                }
+            }
         }
-        if (!isInterior(sx, sy, maze) || !isInterior(sx2, sy2, maze)) {
-            return;
+        for (int y = 0; y < h - 2; y++) {
+            for (int x = 0; x < w - 1; x++) {
+                if (isTraversable(maze, x, y) && isTraversable(maze, x + 1, y)
+                        && isTraversable(maze, x, y + 1) && isTraversable(maze, x + 1, y + 1)
+                        && isTraversable(maze, x, y + 2) && isTraversable(maze, x + 1, y + 2)) {
+                    return true;
+                }
+            }
         }
-        maze[sy][sx] = MazeCellState.ROAD;
-        maze[sy2][sx2] = MazeCellState.ROAD;
+        return false;
+    }
+
+    private boolean isTraversable(int[][] maze, int x, int y) {
+        return (maze[y][x] & MazeCellState.WALL) != MazeCellState.WALL;
+    }
+
+    private boolean allLogicalCellsVisited(boolean[][] visited) {
+        for (int y = 0; y < visited.length; y++) {
+            for (int x = 0; x < visited[0].length; x++) {
+                if (!visited[y][x]) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private boolean isInsideCell(int x, int y, boolean[][] visited) {
@@ -188,25 +232,24 @@ public class MazeService {
         if (previousDirection == null) {
             return directions;
         }
-        // Prefer turns to reduce very long straight channels.
+        // Strongly prefer turns: more zig-zags and side branches (misleading dead ends) for younger players.
         directions.sort((a, b) -> Integer.compare(
                 scoreDirection(b, previousDirection, straightBonus),
                 scoreDirection(a, previousDirection, straightBonus)));
+        if (random.nextDouble() < 0.28d) {
+            Collections.swap(directions, 0, 1 + random.nextInt(Math.min(3, directions.size() - 1)));
+        }
         return directions;
     }
 
     private int scoreDirection(Direction candidate, Direction previousDirection, int straightBonus) {
-        int score = random.nextInt(50);
+        int score = random.nextInt(95);
         if (candidate == previousDirection) {
-            score -= 20 + straightBonus * 3;
+            score -= 48 + straightBonus * 10;
         } else {
-            score += 20;
+            score += 28;
         }
         return score;
-    }
-
-    private boolean isInterior(int x, int y, int[][] maze) {
-        return y > 0 && y < maze.length - 1 && x > 0 && x < maze[0].length - 1;
     }
 
     private void applyBoundaryLockdown(int[][] maze) {
