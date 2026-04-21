@@ -26,6 +26,7 @@ public class MazeService {
         int rows = normalizeSize(requestedRows, DEFAULT_ROWS);
         int width = cols * 2 + 1;
         int height = rows * 2 + 1;
+        int middleY = height / 2;
         for (int i = 0; i < MAX_RETRY; i++) {
             int[][] maze = createMazeBuffer(width, height);
             boolean[][] visited = new boolean[rows][cols];
@@ -33,20 +34,11 @@ public class MazeService {
 
             MazePoint goal = new MazePoint(width / 2, height / 2);
             maze[goal.getY()][goal.getX()] = MazeCellState.ROAD;
+            applyBoundaryLockdown(maze);
+            openEntriesAtMiddle(maze, middleY);
 
-            Integer startAY = findEntryYNearMiddle(maze, true);
-            Integer startBY = findEntryYNearMiddle(maze, false);
-            if (startAY == null || startBY == null) {
-                continue;
-            }
-
-            maze[startAY][0] = MazeCellState.ROAD;
-            maze[startAY][1] = MazeCellState.ROAD;
-            maze[startBY][width - 1] = MazeCellState.ROAD;
-            maze[startBY][width - 2] = MazeCellState.ROAD;
-
-            MazePoint startA = new MazePoint(0, startAY);
-            MazePoint startB = new MazePoint(width - 1, startBY);
+            MazePoint startA = new MazePoint(0, middleY);
+            MazePoint startB = new MazePoint(width - 1, middleY);
             int distanceA = bfsShortestDistance(maze, startA, goal);
             int distanceB = bfsShortestDistance(maze, startB, goal);
             if (!isFair(distanceA, distanceB)) {
@@ -175,6 +167,9 @@ public class MazeService {
         if (!isInside(sx, sy, maze) || !isInside(sx2, sy2, maze)) {
             return;
         }
+        if (!isInterior(sx, sy, maze) || !isInterior(sx2, sy2, maze)) {
+            return;
+        }
         maze[sy][sx] = MazeCellState.ROAD;
         maze[sy2][sx2] = MazeCellState.ROAD;
     }
@@ -210,20 +205,32 @@ public class MazeService {
         return score;
     }
 
-    private Integer findEntryYNearMiddle(int[][] maze, boolean leftSide) {
-        int middleY = maze.length / 2;
-        int nearX = leftSide ? 1 : maze[0].length - 2;
-        for (int offset = 0; offset < maze.length; offset++) {
-            int up = middleY - offset;
-            int down = middleY + offset;
-            if (up >= 1 && up < maze.length - 1 && (maze[up][nearX] & MazeCellState.WALL) != MazeCellState.WALL) {
-                return up;
-            }
-            if (down >= 1 && down < maze.length - 1 && (maze[down][nearX] & MazeCellState.WALL) != MazeCellState.WALL) {
-                return down;
-            }
+    private boolean isInterior(int x, int y, int[][] maze) {
+        return y > 0 && y < maze.length - 1 && x > 0 && x < maze[0].length - 1;
+    }
+
+    private void applyBoundaryLockdown(int[][] maze) {
+        int height = maze.length;
+        int width = maze[0].length;
+        for (int x = 0; x < width; x++) {
+            maze[0][x] = MazeCellState.WALL;
+            maze[height - 1][x] = MazeCellState.WALL;
         }
-        return null;
+        for (int y = 0; y < height; y++) {
+            maze[y][0] = MazeCellState.WALL;
+            maze[y][width - 1] = MazeCellState.WALL;
+        }
+    }
+
+    private void openEntriesAtMiddle(int[][] maze, int middleY) {
+        int width = maze[0].length;
+        if (middleY <= 0 || middleY >= maze.length - 1) {
+            throw new IllegalStateException("Invalid middle entry coordinate.");
+        }
+        maze[middleY][0] = MazeCellState.ROAD;
+        maze[middleY][1] = MazeCellState.ROAD;
+        maze[middleY][width - 1] = MazeCellState.ROAD;
+        maze[middleY][width - 2] = MazeCellState.ROAD;
     }
 
     private boolean isFair(int distanceA, int distanceB) {
