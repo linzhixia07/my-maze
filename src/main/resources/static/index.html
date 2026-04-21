@@ -15,8 +15,33 @@
         }
         .game {
             width: 100%;
-            max-width: 760px;
+            max-width: 1100px;
             text-align: center;
+        }
+        .arena {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        .player-panel {
+            width: 180px;
+            text-align: left;
+        }
+        .player-panel label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: #3f4957;
+            font-weight: bold;
+        }
+        .player-panel input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 10px;
+            border: 1px solid #b7c2d0;
+            border-radius: 8px;
+            font-size: 14px;
         }
         canvas {
             width: 100%;
@@ -38,34 +63,38 @@
             color: #fff;
             cursor: pointer;
         }
-        .winner-banner {
-            min-height: 34px;
-            margin-top: 10px;
-            font-size: 28px;
-            font-weight: bold;
-            color: #ff5d3d;
-        }
     </style>
 </head>
 <body>
 <div class="game">
-    <canvas id="mazeCanvas" width="700" height="700"></canvas>
-    <div class="panel">
-        <button id="resetBtn">重置迷宫</button>
+    <div class="arena">
+        <div class="player-panel">
+            <label for="playerAName">玩家 A 名字</label>
+            <input id="playerAName" type="text" value="玩家A" maxlength="16">
+        </div>
+        <canvas id="mazeCanvas" width="700" height="700"></canvas>
+        <div class="player-panel">
+            <label for="playerBName">玩家 B 名字</label>
+            <input id="playerBName" type="text" value="玩家B" maxlength="16">
+        </div>
     </div>
-    <div id="winnerBanner" class="winner-banner"></div>
+    <div class="panel">
+        <button id="resetBtn">重制游戏</button>
+    </div>
 </div>
 <script>
     (function () {
         var canvas = document.getElementById("mazeCanvas");
         var ctx = canvas.getContext("2d");
-        var winnerBanner = document.getElementById("winnerBanner");
+        var playerAInput = document.getElementById("playerAName");
+        var playerBInput = document.getElementById("playerBName");
         var maze = [];
         var players = {};
         var goal = null;
         var breadcrumbs = {};
         var cellSize = 24;
         var inputLocked = false;
+        var winnerMessage = "";
         var keyPressed = {};
         var moveLoopId = null;
         var keyMapping = {
@@ -92,6 +121,9 @@
         }
 
         function onKeyDown(event) {
+            if (inputLocked) {
+                return;
+            }
             if (keyMapping[event.key]) {
                 event.preventDefault();
                 keyPressed[event.key] = true;
@@ -141,9 +173,9 @@
 
         function generateMaze() {
             inputLocked = false;
+            winnerMessage = "";
             keyPressed = {};
-            winnerBanner.textContent = "";
-            fetch("/api/maze/reset", {
+            fetch("/api/maze/generate", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({cols: 21, rows: 21})
@@ -164,7 +196,8 @@
                 applyState(data);
                 if (data.gameOver) {
                     inputLocked = true;
-                    winnerBanner.textContent = "玩家 " + data.winner + " 获胜！";
+                    winnerMessage = getWinnerMessage(data.winner);
+                    render();
                 }
             })
             .catch(function () {});
@@ -207,6 +240,7 @@
             drawWallOutline();
             drawGoal();
             drawPlayers();
+            drawWinnerOverlay();
         }
 
         function drawCell(x, y, value) {
@@ -268,6 +302,33 @@
             ctx.beginPath();
             ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 2.5, 0, Math.PI * 2);
             ctx.fill();
+        }
+
+        function drawWinnerOverlay() {
+            if (!winnerMessage || !goal) {
+                return;
+            }
+            var centerX = goal.x * cellSize + cellSize / 2;
+            var centerY = goal.y * cellSize + cellSize / 2;
+            var fontSize = Math.max(28, Math.floor(cellSize * 1.15));
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "bold " + fontSize + "px Arial";
+            ctx.fillStyle = "rgba(20, 20, 20, 0.35)";
+            ctx.fillText(winnerMessage, centerX + 3, centerY + 3);
+            ctx.fillStyle = "#ffd54f";
+            ctx.fillText(winnerMessage, centerX, centerY);
+            ctx.textAlign = "start";
+            ctx.textBaseline = "alphabetic";
+        }
+
+        function getWinnerMessage(winnerId) {
+            var name = winnerId === "A" ? playerAInput.value : playerBInput.value;
+            var safeName = (name || "").trim();
+            if (!safeName) {
+                safeName = winnerId === "A" ? "玩家A" : "玩家B";
+            }
+            return safeName + " 获得了胜利！";
         }
 
         init();
