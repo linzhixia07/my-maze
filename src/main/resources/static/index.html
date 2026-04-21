@@ -157,81 +157,88 @@
         var nextLevelBtn = document.getElementById("nextLevelBtn");
         var MAX_LEVEL = 5;
         var currentLevel = 1;
-        /** 难度配色：L1 薄荷绿 → 中间黄/橙 → L5 警示深红（路径与墙体对比明显） */
+        /**
+         * 难度配色：绿→黄→橙→红。cellRoad 为浅色可走面，cellWall 为同色相的深色实体墙，高对比便于识别。
+         */
         var LEVEL_THEMES = {
             1: {
-                cellRoad: "#e8faf0",
-                cellWall: "#5eb88a",
-                breadcrumbA: "rgba(13, 92, 62, 0.42)",
-                breadcrumbB: "rgba(176, 40, 40, 0.38)",
-                pageBg: "#dff5ea",
-                canvasBg: "#eaf8f1",
-                textMain: "#0f3d2a",
-                labelColor: "#1a5c40",
+                cellRoad: "#f0faf4",
+                cellWall: "#0f3d2a",
+                breadcrumbA: "rgba(25, 118, 210, 0.55)",
+                breadcrumbB: "rgba(229, 57, 53, 0.55)",
+                pageBg: "#e4f3eb",
+                canvasBg: "#f0faf4",
+                textMain: "#0f291c",
+                labelColor: "#1b4332",
                 inputBorder: "#8fd4b0",
-                canvasBorder: "#4a9d73",
-                badgeBg: "rgba(255, 255, 255, 0.94)",
-                badgeText: "#0d3d28"
+                canvasBorder: "#2e7d56",
+                badgeBg: "rgba(255, 255, 255, 0.95)",
+                badgeText: "#0f291c"
             },
             2: {
-                cellRoad: "#f4fce3",
-                cellWall: "#9db567",
-                breadcrumbA: "rgba(27, 94, 32, 0.4)",
-                breadcrumbB: "rgba(183, 28, 28, 0.36)",
-                pageBg: "#eef6d8",
-                canvasBg: "#f5fae6",
-                textMain: "#2d4010",
-                labelColor: "#3d5220",
-                inputBorder: "#c5db8c",
-                canvasBorder: "#7a9f3d",
+                cellRoad: "#f6fcec",
+                cellWall: "#2d4a18",
+                breadcrumbA: "rgba(25, 118, 210, 0.55)",
+                breadcrumbB: "rgba(229, 57, 53, 0.55)",
+                pageBg: "#edf6df",
+                canvasBg: "#f6fcec",
+                textMain: "#1e3310",
+                labelColor: "#2d4a18",
+                inputBorder: "#aed581",
+                canvasBorder: "#558b2f",
                 badgeBg: "rgba(255, 255, 255, 0.95)",
-                badgeText: "#2a3a12"
+                badgeText: "#1e3310"
             },
             3: {
-                cellRoad: "#fff9e6",
-                cellWall: "#d4a84a",
-                breadcrumbA: "rgba(21, 101, 192, 0.38)",
-                breadcrumbB: "rgba(198, 40, 40, 0.38)",
-                pageBg: "#fff3d6",
-                canvasBg: "#fff8e8",
-                textMain: "#4a3200",
-                labelColor: "#5c3d00",
-                inputBorder: "#f0c96a",
-                canvasBorder: "#c49000",
-                badgeBg: "rgba(255, 252, 240, 0.96)",
-                badgeText: "#4a3200"
+                cellRoad: "#fffdf7",
+                cellWall: "#6a4a00",
+                breadcrumbA: "rgba(21, 101, 192, 0.56)",
+                breadcrumbB: "rgba(211, 47, 47, 0.56)",
+                pageBg: "#fff6e0",
+                canvasBg: "#fffdf7",
+                textMain: "#4a3500",
+                labelColor: "#5c4200",
+                inputBorder: "#ffd54f",
+                canvasBorder: "#f9a825",
+                badgeBg: "rgba(255, 255, 255, 0.96)",
+                badgeText: "#4a3500"
             },
             4: {
-                cellRoad: "#fff0e0",
-                cellWall: "#c96d2d",
-                breadcrumbA: "rgba(13, 71, 161, 0.4)",
-                breadcrumbB: "rgba(183, 28, 28, 0.4)",
-                pageBg: "#ffe8d4",
-                canvasBg: "#fff2e6",
+                cellRoad: "#fffaf6",
+                cellWall: "#7a3a00",
+                breadcrumbA: "rgba(13, 71, 161, 0.56)",
+                breadcrumbB: "rgba(211, 47, 47, 0.56)",
+                pageBg: "#fff0e6",
+                canvasBg: "#fffaf6",
                 textMain: "#4a2100",
                 labelColor: "#5c2800",
-                inputBorder: "#ffb380",
-                canvasBorder: "#e65100",
-                badgeBg: "rgba(255, 248, 240, 0.95)",
-                badgeText: "#3d1a00"
+                inputBorder: "#ffcc80",
+                canvasBorder: "#ef6c00",
+                badgeBg: "rgba(255, 255, 255, 0.96)",
+                badgeText: "#4a2100"
             },
             5: {
-                cellRoad: "#5c2224",
-                cellWall: "#2a0c0e",
-                breadcrumbA: "rgba(255, 213, 79, 0.5)",
-                breadcrumbB: "rgba(255, 138, 128, 0.5)",
-                pageBg: "#1a0a0b",
-                canvasBg: "#2a1214",
-                textMain: "#fce8e8",
-                labelColor: "#ffcdd2",
-                inputBorder: "#6d2a2e",
-                canvasBorder: "#b71c1c",
-                badgeBg: "rgba(60, 20, 22, 0.92)",
-                badgeText: "#ffebee"
+                cellRoad: "#fff8f8",
+                cellWall: "#5c1018",
+                breadcrumbA: "rgba(25, 118, 210, 0.58)",
+                breadcrumbB: "rgba(229, 57, 53, 0.58)",
+                pageBg: "#fceaea",
+                canvasBg: "#fff8f8",
+                textMain: "#3d0a10",
+                labelColor: "#6b141c",
+                inputBorder: "#ef9a9a",
+                canvasBorder: "#c62828",
+                badgeBg: "rgba(255, 255, 255, 0.96)",
+                badgeText: "#3d0a10"
             }
         };
-        var activeTheme = LEVEL_THEMES[1];
-        var WALL_BLEED_PX = 0.6;
+
+        function buildActiveTheme(level) {
+            var lv = level < 1 ? 1 : (level > MAX_LEVEL ? MAX_LEVEL : level);
+            return Object.assign({}, LEVEL_THEMES[lv] || LEVEL_THEMES[1]);
+        }
+
+        var activeTheme = buildActiveTheme(1);
         var maze = [];
         var players = {};
         var goal = null;
@@ -264,6 +271,11 @@
             startMoveLoop();
             applyLevelTheme(currentLevel);
             updateNextLevelButton();
+            window.addEventListener("resize", function () {
+                if (maze && maze.length > 0) {
+                    render();
+                }
+            });
             loadMazeForCurrentLevel();
         }
 
@@ -290,7 +302,7 @@
 
         function applyLevelTheme(level) {
             var lv = level < 1 ? 1 : (level > MAX_LEVEL ? MAX_LEVEL : level);
-            activeTheme = LEVEL_THEMES[lv] || LEVEL_THEMES[1];
+            activeTheme = buildActiveTheme(lv);
             var root = document.documentElement;
             root.style.setProperty("--page-bg", activeTheme.pageBg);
             root.style.setProperty("--canvas-bg", activeTheme.canvasBg);
@@ -407,18 +419,39 @@
             return response.json();
         }
 
+        function alignCanvasBufferToDisplay() {
+            var rect = canvas.getBoundingClientRect();
+            var cssW = Math.floor(rect.width);
+            var cssH = Math.floor(rect.height);
+            if (cssW < 16 || cssH < 16) {
+                cssW = 700;
+                cssH = 700;
+            }
+            canvas._layoutCssW = cssW;
+            canvas._layoutCssH = cssH;
+            var dpr = window.devicePixelRatio || 1;
+            var bufW = Math.max(1, Math.floor(cssW * dpr));
+            var bufH = Math.max(1, Math.floor(cssH * dpr));
+            if (canvas.width !== bufW || canvas.height !== bufH) {
+                canvas.width = bufW;
+                canvas.height = bufH;
+            }
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
         function render() {
             if (!maze || maze.length === 0) {
                 return;
             }
             var rows = maze.length;
             var cols = maze[0].length;
-            cellSize = Math.floor(Math.min(canvas.width / cols, canvas.height / rows));
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = activeTheme.canvasBg;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            alignCanvasBufferToDisplay();
+            var lw = canvas._layoutCssW;
+            var lh = canvas._layoutCssH;
+            cellSize = Math.floor(Math.min(lw / cols, lh / rows));
+            ctx.clearRect(0, 0, lw, lh);
 
-            drawMazeSeamless(rows, cols);
+            drawMazeSeamless(rows, cols, lw, lh);
             drawBreadcrumbs();
             drawGoal();
             drawPlayers();
@@ -426,30 +459,22 @@
         }
 
         /**
-         * 先铺通路，再以略大于格子的实心块绘制墙体，消除相邻墙格之间的缝隙。
+         * 1) 整幅浅色道路底色；2) 深色墙体每格宽高 +1px 且坐标取整，消除亚像素缝隙；
+         * 绘制在 CSS 像素坐标系下（与高 DPR 缓冲对齐）。
          */
-        function drawMazeSeamless(rows, cols) {
+        function drawMazeSeamless(rows, cols, lw, lh) {
             var x;
             var y;
-            var bleed = WALL_BLEED_PX;
             ctx.fillStyle = activeTheme.cellRoad;
-            for (y = 0; y < rows; y++) {
-                for (x = 0; x < cols; x++) {
-                    if ((maze[y][x] & 2) !== 2) {
-                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-                    }
-                }
-            }
+            ctx.fillRect(0, 0, lw, lh);
             ctx.fillStyle = activeTheme.cellWall;
+            var wallSpan = cellSize + 1;
             for (y = 0; y < rows; y++) {
                 for (x = 0; x < cols; x++) {
                     if ((maze[y][x] & 2) === 2) {
-                        ctx.fillRect(
-                            x * cellSize - bleed,
-                            y * cellSize - bleed,
-                            cellSize + bleed * 2,
-                            cellSize + bleed * 2
-                        );
+                        var px = Math.floor(x * cellSize);
+                        var py = Math.floor(y * cellSize);
+                        ctx.fillRect(px, py, wallSpan, wallSpan);
                     }
                 }
             }
@@ -500,14 +525,14 @@
             if (!winnerMessage) {
                 return;
             }
-            var w = canvas.width;
-            var h = canvas.height;
+            var w = canvas.clientWidth;
+            var h = canvas.clientHeight;
             var cx = w / 2;
             var cy = h / 2;
             var fontSize = Math.max(26, Math.min(42, Math.floor(Math.min(w, h) / 18)));
 
             ctx.save();
-            ctx.fillStyle = "rgba(8, 10, 16, 0.74)";
+            ctx.fillStyle = "rgba(6, 8, 14, 0.78)";
             ctx.fillRect(0, 0, w, h);
 
             ctx.textAlign = "center";

@@ -22,20 +22,20 @@ public class MazeService {
     public static final int MAX_LEVEL = 5;
     public static final int DEFAULT_LEVEL = 4;
     private static final int MAX_RETRY = 300;
-    private static final double FAIRNESS_THRESHOLD = 0.15d;
     /**
      * Canonical difficulty tiers: grid size and carving biases (branching / path winding).
-     * Level 4 matches the historic stable release (21×21 logical cells and prior tuning).
+     * Level 4 is the fixed benchmark (21×21 logical cells, prior tuning). Sizes step by 2
+     * logical cells per level for a smoother curve; Level 5 is deliberately milder than before.
      */
     private static final Map<Integer, MazeLevelProfile> LEVEL_PROFILES_BY_NUMBER;
 
     static {
         Map<Integer, MazeLevelProfile> table = new HashMap<Integer, MazeLevelProfile>();
-        table.put(1, new MazeLevelProfile(11, 11, 12, 4, 9, 0.06d, 95));
-        table.put(2, new MazeLevelProfile(15, 15, 22, 6, 14, 0.12d, 95));
-        table.put(3, new MazeLevelProfile(19, 19, 38, 8, 22, 0.20d, 95));
+        table.put(1, new MazeLevelProfile(15, 15, 20, 6, 13, 0.10d, 95));
+        table.put(2, new MazeLevelProfile(17, 17, 30, 7, 17, 0.16d, 95));
+        table.put(3, new MazeLevelProfile(19, 19, 40, 9, 22, 0.22d, 95));
         table.put(4, new MazeLevelProfile(21, 21, 48, 10, 28, 0.28d, 95));
-        table.put(5, new MazeLevelProfile(29, 29, 62, 10, 38, 0.42d, 95));
+        table.put(5, new MazeLevelProfile(23, 23, 54, 10, 31, 0.32d, 95));
         LEVEL_PROFILES_BY_NUMBER = Collections.unmodifiableMap(table);
     }
 
@@ -92,9 +92,9 @@ public class MazeService {
 
             MazePoint startA = new MazePoint(0, middleY);
             MazePoint startB = new MazePoint(width - 1, middleY);
-            int distanceA = bfsShortestDistance(maze, startA, goal);
-            int distanceB = bfsShortestDistance(maze, startB, goal);
-            if (!isFair(distanceA, distanceB)) {
+            int shortestA = bfsShortestDistance(maze, startA, goal);
+            int shortestB = bfsShortestDistance(maze, startB, goal);
+            if (!isBalancedShortestPath(shortestA, shortestB)) {
                 continue;
             }
             return new GameState(maze, goal, startA, startB);
@@ -324,13 +324,17 @@ public class MazeService {
         maze[middleY][width - 2] = MazeCellState.ROAD;
     }
 
-    private boolean isFair(int distanceA, int distanceB) {
-        if (distanceA <= 0 || distanceB <= 0) {
+    /**
+     * After generation, two BFS runs yield shortest path lengths La and Lb from each entry to
+     * the goal. Reject when the imbalance exceeds 10% of their average, i.e. when
+     * absolute difference is greater than ceil of 5% of (La + Lb).
+     */
+    private boolean isBalancedShortestPath(int shortestA, int shortestB) {
+        if (shortestA <= 0 || shortestB <= 0) {
             return false;
         }
-        int max = Math.max(distanceA, distanceB);
-        int diff = Math.abs(distanceA - distanceB);
-        return diff <= Math.ceil(max * FAIRNESS_THRESHOLD);
+        int diff = Math.abs(shortestA - shortestB);
+        return diff <= Math.ceil((shortestA + shortestB) * 0.05d);
     }
 
     private int bfsShortestDistance(int[][] maze, MazePoint start, MazePoint goal) {
