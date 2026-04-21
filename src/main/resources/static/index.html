@@ -19,10 +19,6 @@
             max-width: 760px;
             text-align: center;
         }
-        h1 {
-            margin: 8px 0 12px;
-            color: #ff6f59;
-        }
         canvas {
             width: 100%;
             max-width: 700px;
@@ -50,69 +46,52 @@
         button:active {
             transform: scale(0.98);
         }
-        #message {
-            margin-top: 12px;
-            min-height: 24px;
-            font-size: 20px;
-            font-weight: bold;
-            color: #ff3d68;
-        }
     </style>
 </head>
 <body>
 <div class="game">
-    <h1>儿童迷宫乐园</h1>
     <canvas id="mazeCanvas" width="700" height="700"></canvas>
-    <div class="panel">
-        <button id="newGameBtn">新迷宫</button>
-    </div>
-    <div class="panel">
-        <button data-dir="UP">上</button>
-        <button data-dir="LEFT">左</button>
-        <button data-dir="DOWN">下</button>
-        <button data-dir="RIGHT">右</button>
-    </div>
-    <div id="message"></div>
 </div>
 
 <script>
     (function () {
         var canvas = document.getElementById("mazeCanvas");
         var ctx = canvas.getContext("2d");
-        var message = document.getElementById("message");
         var maze = [];
-        var player = null;
+        var players = {};
         var goal = null;
-        var breadcrumbs = [];
-        var cellSize = 28;
+        var breadcrumbs = {};
+        var cellSize = 40;
 
         function init() {
-            bindButtons();
             generateMaze();
             window.addEventListener("keydown", onKeyDown);
         }
 
-        function bindButtons() {
-            document.getElementById("newGameBtn").addEventListener("click", generateMaze);
-            var moveButtons = document.querySelectorAll("button[data-dir]");
-            for (var i = 0; i < moveButtons.length; i++) {
-                moveButtons[i].addEventListener("click", function (event) {
-                    move(event.target.getAttribute("data-dir"));
-                });
-            }
-        }
-
         function onKeyDown(event) {
             var mapping = {
-                ArrowUp: "UP",
-                ArrowDown: "DOWN",
-                ArrowLeft: "LEFT",
-                ArrowRight: "RIGHT"
+                ArrowUp: {playerId: "A", direction: "UP"},
+                ArrowDown: {playerId: "A", direction: "DOWN"},
+                ArrowLeft: {playerId: "A", direction: "LEFT"},
+                ArrowRight: {playerId: "A", direction: "RIGHT"},
+                w: {playerId: "B", direction: "UP"},
+                W: {playerId: "B", direction: "UP"},
+                s: {playerId: "B", direction: "DOWN"},
+                S: {playerId: "B", direction: "DOWN"},
+                a: {playerId: "B", direction: "LEFT"},
+                A: {playerId: "B", direction: "LEFT"},
+                d: {playerId: "B", direction: "RIGHT"},
+                D: {playerId: "B", direction: "RIGHT"}
             };
-            var direction = mapping[event.key];
-            if (direction) {
+            var action = mapping[event.key];
+            if (action) {
                 event.preventDefault();
-                move(direction);
+                move(action.playerId, action.direction);
+                return;
+            }
+            if (event.key === "r" || event.key === "R") {
+                event.preventDefault();
+                generateMaze();
             }
         }
 
@@ -120,45 +99,33 @@
             fetch("/api/maze/generate", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({cols: 9, rows: 9})
+                body: JSON.stringify({cols: 25, rows: 25})
             })
             .then(parseJson)
             .then(function (data) {
                 maze = data.maze;
-                player = data.player;
+                players = data.players || {};
                 goal = data.goal;
-                breadcrumbs = data.breadcrumbs || [];
-                message.textContent = "试试走到星星终点吧！";
+                breadcrumbs = data.breadcrumbs || {};
                 render();
             })
-            .catch(function () {
-                message.textContent = "生成失败，请重试。";
-            });
+            .catch(function () {});
         }
 
-        function move(direction) {
+        function move(playerId, direction) {
             fetch("/api/maze/move", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({direction: direction})
+                body: JSON.stringify({playerId: playerId, direction: direction})
             })
             .then(parseJson)
             .then(function (data) {
-                player = data.player;
+                players = data.players || {};
                 goal = data.goal;
-                breadcrumbs = data.breadcrumbs || [];
-                if (!data.moved) {
-                    message.textContent = "撞墙啦，换个方向试试！";
-                } else if (data.won) {
-                    message.textContent = "太棒了，你找到出口了！";
-                } else {
-                    message.textContent = "继续前进，加油！";
-                }
+                breadcrumbs = data.breadcrumbs || {};
                 render();
             })
-            .catch(function () {
-                message.textContent = "请先点新迷宫开始。";
-            });
+            .catch(function () {});
         }
 
         function parseJson(response) {
@@ -184,7 +151,7 @@
             }
             drawBreadcrumbs();
             drawGoal();
-            drawPlayer();
+            drawPlayers();
         }
 
         function drawCell(x, y, value) {
@@ -194,11 +161,17 @@
         }
 
         function drawBreadcrumbs() {
-            ctx.fillStyle = "#ffd166";
-            for (var i = 0; i < breadcrumbs.length; i++) {
-                var p = breadcrumbs[i];
+            drawPlayerBreadcrumb("A", "rgba(47,128,237,0.45)");
+            drawPlayerBreadcrumb("B", "rgba(235,87,87,0.45)");
+        }
+
+        function drawPlayerBreadcrumb(playerId, color) {
+            var path = breadcrumbs[playerId] || [];
+            ctx.fillStyle = color;
+            for (var i = 0; i < path.length; i++) {
+                var p = path[i];
                 ctx.beginPath();
-                ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 6, 0, Math.PI * 2);
+                ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 8.5, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
@@ -212,13 +185,19 @@
             ctx.fillText("★", goal.x * cellSize + cellSize * 0.15, goal.y * cellSize + cellSize * 0.85);
         }
 
-        function drawPlayer() {
-            if (!player) {
+        function drawPlayers() {
+            drawPlayer("A", "#2f80ed");
+            drawPlayer("B", "#eb5757");
+        }
+
+        function drawPlayer(playerId, color) {
+            var p = players[playerId];
+            if (!p) {
                 return;
             }
-            ctx.fillStyle = "#4caf50";
+            ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2, cellSize / 2.7, 0, Math.PI * 2);
+            ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 2.5, 0, Math.PI * 2);
             ctx.fill();
         }
 

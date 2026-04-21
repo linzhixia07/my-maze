@@ -7,5 +7,4 @@ public final class MazeCellState {
     public static final int ROAD = 1;
     public static final int WALL = 1 << 1;
     public static final int VISITED = 1 << 2;
-    public static final int CURRENT = 1 << 3;
 }

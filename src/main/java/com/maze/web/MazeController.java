@@ -1,9 +1,11 @@
 package com.maze.web;
 
 import com.maze.game.Direction;
+import com.maze.game.GameState;
 import com.maze.game.MazePoint;
 import com.maze.game.MazeService;
-import com.maze.game.MazeSessionState;
+import com.maze.game.Player;
+import com.maze.game.PlayerId;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -12,7 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpSession;
+import java.util.Map;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/maze")
@@ -28,23 +32,29 @@ public class MazeController {
     public MazeResponse generate(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
         Integer cols = request == null ? null : request.getCols();
         Integer rows = request == null ? null : request.getRows();
-        MazeSessionState state = mazeService.generate(cols, rows);
+        GameState state = mazeService.generate(cols, rows);
         session.setAttribute(SESSION_KEY, state);
-        return MazeResponse.from(state, true, true);
+        return MazeResponse.from(state, true, true, null);
     }
 
     @PostMapping("/move")
     public MazeResponse move(@RequestBody MoveRequest request, HttpSession session) {
-        MazeSessionState state = (MazeSessionState) session.getAttribute(SESSION_KEY);
+        GameState state = (GameState) session.getAttribute(SESSION_KEY);
         if (state == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please generate maze first.");
         }
-        if (request == null || request.getDirection() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Direction is required.");
+        if (request == null || request.getDirection() == null || request.getPlayerId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Direction and playerId are required.");
         }
         Direction direction = parseDirection(request.getDirection());
-        boolean moved = mazeService.tryMove(state, direction);
-        return MazeResponse.from(state, moved, false);
+        PlayerId playerId = parsePlayerId(request.getPlayerId());
+        state.getLock().lock();
+        try {
+            MazeService.MoveResult moveResult = mazeService.tryMove(state, playerId, direction);
+            return MazeResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner());
+        } finally {
+            state.getLock().unlock();
+        }
     }
 
     private Direction parseDirection(String value) {
@@ -52,6 +62,14 @@ public class MazeController {
             return Direction.valueOf(value.trim().toUpperCase());
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid direction.");
+        }
+    }
+
+    private PlayerId parsePlayerId(String value) {
+        try {
+            return PlayerId.valueOf(value.trim().toUpperCase());
+        } catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid playerId.");
         }
     }
 
@@ -78,6 +96,7 @@ public class MazeController {
 
     public static class MoveRequest {
         private String direction;
+        private String playerId;
 
         public String getDirection() {
             return direction;
@@ -86,27 +105,40 @@ public class MazeController {
         public void setDirection(String direction) {
             this.direction = direction;
         }
+
+        public String getPlayerId() {
+            return playerId;
+        }
+
+        public void setPlayerId(String playerId) {
+            this.playerId = playerId;
+        }
     }
 
     public static class MazeResponse {
         private int[][] maze;
-        private PointDto player;
-        private PointDto start;
+        private Map<String, PointDto> players;
         private PointDto goal;
-        private List<MazePoint> breadcrumbs;
+        private Map<String, List<MazePoint>> breadcrumbs;
         private boolean moved;
-        private boolean won;
+        private boolean gameOver;
+        private String winner;
 
-        public static MazeResponse from(MazeSessionState state, boolean moved, boolean includeMaze) {
+        public static MazeResponse from(GameState state, boolean moved, boolean includeMaze, PlayerId winnerId) {
             MazeResponse response = new MazeResponse();
             response.maze = includeMaze ? state.getMaze() : null;
-            response.player = new PointDto(state.getPlayer().getX(), state.getPlayer().getY());
-            response.start = new PointDto(state.getStart().getX(), state.getStart().getY());
             response.goal = new PointDto(state.getGoal().getX(), state.getGoal().getY());
-            response.breadcrumbs = state.getBreadcrumbs();
+            response.players = state.getPlayers().entrySet().stream()
+                    .collect(Collectors.toMap(
+                            e -> e.getKey().name(),
+                            e -> new PointDto(e.getValue().getX(), e.getValue().getY())
+                    ));
+            response.breadcrumbs = state.getBreadcrumbs().entrySet().stream()
+                    .collect(Collectors.toMap(e -> e.getKey().name(), Map.Entry::getValue));
             response.moved = moved;
-            response.won = state.getPlayer().getX() == state.getGoal().getX()
-                    && state.getPlayer().getY() == state.getGoal().getY();
+            response.gameOver = state.isGameOver();
+            response.winner = winnerId == null && state.getWinner() != null ? state.getWinner().name()
+                    : winnerId == null ? null : winnerId.name();
             return response;
         }
 
@@ -114,19 +146,15 @@ public class MazeController {
             return maze;
         }
 
-        public PointDto getPlayer() {
-            return player;
-        }
-
-        public PointDto getStart() {
-            return start;
+        public Map<String, PointDto> getPlayers() {
+            return players;
         }
 
         public PointDto getGoal() {
             return goal;
         }
 
-        public List<MazePoint> getBreadcrumbs() {
+        public Map<String, List<MazePoint>> getBreadcrumbs() {
             return breadcrumbs;
         }
 
@@ -134,8 +162,12 @@ public class MazeController {
             return moved;
         }
 
-        public boolean isWon() {
-            return won;
+        public boolean isGameOver() {
+            return gameOver;
+        }
+
+        public String getWinner() {
+            return winner;
         }
     }
 
