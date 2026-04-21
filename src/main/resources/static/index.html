@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>儿童迷宫乐园</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: "Arial", sans-serif;
+            background: #fffbe6;
+            color: #2f4858;
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+        }
+        .game {
+            width: 100%;
+            max-width: 760px;
+            text-align: center;
+        }
+        h1 {
+            margin: 8px 0 12px;
+            color: #ff6f59;
+        }
+        canvas {
+            width: 100%;
+            max-width: 700px;
+            background: #ffffff;
+            border: 6px solid #6c63ff;
+            border-radius: 14px;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+        }
+        .panel {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            background: #4caf50;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        #message {
+            margin-top: 12px;
+            min-height: 24px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #ff3d68;
+        }
+    </style>
+</head>
+<body>
+<div class="game">
+    <h1>儿童迷宫乐园</h1>
+    <canvas id="mazeCanvas" width="700" height="700"></canvas>
+    <div class="panel">
+        <button id="newGameBtn">新迷宫</button>
+    </div>
+    <div class="panel">
+        <button data-dir="UP">上</button>
+        <button data-dir="LEFT">左</button>
+        <button data-dir="DOWN">下</button>
+        <button data-dir="RIGHT">右</button>
+    </div>
+    <div id="message"></div>
+</div>
+
+<script>
+    (function () {
+        var canvas = document.getElementById("mazeCanvas");
+        var ctx = canvas.getContext("2d");
+        var message = document.getElementById("message");
+        var maze = [];
+        var player = null;
+        var goal = null;
+        var breadcrumbs = [];
+        var cellSize = 28;
+
+        function init() {
+            bindButtons();
+            generateMaze();
+            window.addEventListener("keydown", onKeyDown);
+        }
+
+        function bindButtons() {
+            document.getElementById("newGameBtn").addEventListener("click", generateMaze);
+            var moveButtons = document.querySelectorAll("button[data-dir]");
+            for (var i = 0; i < moveButtons.length; i++) {
+                moveButtons[i].addEventListener("click", function (event) {
+                    move(event.target.getAttribute("data-dir"));
+                });
+            }
+        }
+
+        function onKeyDown(event) {
+            var mapping = {
+                ArrowUp: "UP",
+                ArrowDown: "DOWN",
+                ArrowLeft: "LEFT",
+                ArrowRight: "RIGHT"
+            };
+            var direction = mapping[event.key];
+            if (direction) {
+                event.preventDefault();
+                move(direction);
+            }
+        }
+
+        function generateMaze() {
+            fetch("/api/maze/generate", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({cols: 9, rows: 9})
+            })
+            .then(parseJson)
+            .then(function (data) {
+                maze = data.maze;
+                player = data.player;
+                goal = data.goal;
+                breadcrumbs = data.breadcrumbs || [];
+                message.textContent = "试试走到星星终点吧！";
+                render();
+            })
+            .catch(function () {
+                message.textContent = "生成失败，请重试。";
+            });
+        }
+
+        function move(direction) {
+            fetch("/api/maze/move", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({direction: direction})
+            })
+            .then(parseJson)
+            .then(function (data) {
+                player = data.player;
+                goal = data.goal;
+                breadcrumbs = data.breadcrumbs || [];
+                if (!data.moved) {
+                    message.textContent = "撞墙啦，换个方向试试！";
+                } else if (data.won) {
+                    message.textContent = "太棒了，你找到出口了！";
+                } else {
+                    message.textContent = "继续前进，加油！";
+                }
+                render();
+            })
+            .catch(function () {
+                message.textContent = "请先点新迷宫开始。";
+            });
+        }
+
+        function parseJson(response) {
+            if (!response.ok) {
+                throw new Error("request failed");
+            }
+            return response.json();
+        }
+
+        function render() {
+            if (!maze || maze.length === 0) {
+                return;
+            }
+            var rows = maze.length;
+            var cols = maze[0].length;
+            cellSize = Math.floor(Math.min(canvas.width / cols, canvas.height / rows));
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (var y = 0; y < rows; y++) {
+                for (var x = 0; x < cols; x++) {
+                    drawCell(x, y, maze[y][x]);
+                }
+            }
+            drawBreadcrumbs();
+            drawGoal();
+            drawPlayer();
+        }
+
+        function drawCell(x, y, value) {
+            var isWall = (value & 2) === 2;
+            ctx.fillStyle = isWall ? "#3a3a3a" : "#e8f7ff";
+            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+        }
+
+        function drawBreadcrumbs() {
+            ctx.fillStyle = "#ffd166";
+            for (var i = 0; i < breadcrumbs.length; i++) {
+                var p = breadcrumbs[i];
+                ctx.beginPath();
+                ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawGoal() {
+            if (!goal) {
+                return;
+            }
+            ctx.fillStyle = "#ff9f1c";
+            ctx.font = Math.floor(cellSize * 0.8) + "px serif";
+            ctx.fillText("★", goal.x * cellSize + cellSize * 0.15, goal.y * cellSize + cellSize * 0.85);
+        }
+
+        function drawPlayer() {
+            if (!player) {
+                return;
+            }
+            ctx.fillStyle = "#4caf50";
+            ctx.beginPath();
+            ctx.arc(player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2, cellSize / 2.7, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        init();
+    })();
+</script>
+</body>
+</html>
