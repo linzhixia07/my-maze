@@ -14,8 +14,6 @@
             --canvas-border: #6d7786;
             --badge-bg: rgba(255, 255, 255, 0.92);
             --badge-text: #1f2933;
-            --btn-bg: #4caf50;
-            --btn-text: #fff;
         }
         body {
             margin: 0;
@@ -90,23 +88,48 @@
             transition: background-color 0.45s ease, border-color 0.45s ease;
         }
         .panel {
-            margin-top: 10px;
+            margin-top: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
         }
-        button {
-            padding: 10px 20px;
+        .panel button {
+            padding: 10px 22px;
             border: none;
             border-radius: 8px;
-            font-size: 17px;
-            background: var(--btn-bg);
-            color: var(--btn-text);
+            font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
-            transition: background-color 0.45s ease, color 0.45s ease;
+            transition: background-color 0.35s ease, color 0.35s ease, opacity 0.25s ease, transform 0.12s ease;
+        }
+        .panel button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        .btn-reset-level {
+            background: #546e7a;
+            color: #fff;
+        }
+        .btn-reset-level:hover:not(:disabled) {
+            background: #455a64;
+        }
+        .btn-next-level {
+            background: #ff8f00;
+            color: #fff;
+        }
+        .btn-next-level:hover:not(:disabled) {
+            background: #f57c00;
+        }
+        .panel button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
     </style>
 </head>
 <body>
 <div class="game">
-    <div id="levelBadge" class="level-badge">Level: 4/5</div>
+    <div id="levelBadge" class="level-badge">Level: 1/5</div>
     <div class="arena">
         <div class="player-panel">
             <label for="playerAName">玩家 A 名字</label>
@@ -119,7 +142,8 @@
         </div>
     </div>
     <div class="panel">
-        <button id="resetBtn">重制游戏</button>
+        <button type="button" id="resetLevelBtn" class="btn-reset-level">重置关卡</button>
+        <button type="button" id="nextLevelBtn" class="btn-next-level">下一关</button>
     </div>
 </div>
 <script>
@@ -129,96 +153,85 @@
         var playerAInput = document.getElementById("playerAName");
         var playerBInput = document.getElementById("playerBName");
         var levelBadge = document.getElementById("levelBadge");
+        var resetLevelBtn = document.getElementById("resetLevelBtn");
+        var nextLevelBtn = document.getElementById("nextLevelBtn");
         var MAX_LEVEL = 5;
-        var currentLevel = 4;
+        var currentLevel = 1;
+        /** 难度配色：L1 薄荷绿 → 中间黄/橙 → L5 警示深红（路径与墙体对比明显） */
         var LEVEL_THEMES = {
             1: {
-                cellRoad: "#fafcf8",
-                cellWall: "#c5e1a5",
-                wallStroke: "#8bc34a",
-                breadcrumbA: "rgba(46, 125, 50, 0.38)",
-                breadcrumbB: "rgba(198, 40, 40, 0.34)",
-                pageBg: "#e8f5e9",
-                canvasBg: "#f1f8e9",
-                textMain: "#1b2e1f",
-                labelColor: "#2e4a32",
-                inputBorder: "#a5d6a7",
-                canvasBorder: "#81c784",
-                badgeBg: "rgba(255, 255, 255, 0.95)",
-                badgeText: "#1b3d24",
-                btnBg: "#66bb6a",
-                btnText: "#fff"
+                cellRoad: "#e8faf0",
+                cellWall: "#5eb88a",
+                breadcrumbA: "rgba(13, 92, 62, 0.42)",
+                breadcrumbB: "rgba(176, 40, 40, 0.38)",
+                pageBg: "#dff5ea",
+                canvasBg: "#eaf8f1",
+                textMain: "#0f3d2a",
+                labelColor: "#1a5c40",
+                inputBorder: "#8fd4b0",
+                canvasBorder: "#4a9d73",
+                badgeBg: "rgba(255, 255, 255, 0.94)",
+                badgeText: "#0d3d28"
             },
             2: {
-                cellRoad: "#fffef8",
-                cellWall: "#ffe082",
-                wallStroke: "#ffb74d",
-                breadcrumbA: "rgba(25, 118, 210, 0.36)",
-                breadcrumbB: "rgba(211, 47, 47, 0.34)",
-                pageBg: "#fff8e1",
-                canvasBg: "#fffde7",
-                textMain: "#4e342e",
-                labelColor: "#5d4037",
-                inputBorder: "#ffcc80",
-                canvasBorder: "#ffa726",
-                badgeBg: "rgba(255, 253, 240, 0.96)",
-                badgeText: "#4e342e",
-                btnBg: "#fb8c00",
-                btnText: "#fff"
+                cellRoad: "#f4fce3",
+                cellWall: "#9db567",
+                breadcrumbA: "rgba(27, 94, 32, 0.4)",
+                breadcrumbB: "rgba(183, 28, 28, 0.36)",
+                pageBg: "#eef6d8",
+                canvasBg: "#f5fae6",
+                textMain: "#2d4010",
+                labelColor: "#3d5220",
+                inputBorder: "#c5db8c",
+                canvasBorder: "#7a9f3d",
+                badgeBg: "rgba(255, 255, 255, 0.95)",
+                badgeText: "#2a3a12"
             },
             3: {
-                cellRoad: "#f5feff",
-                cellWall: "#b2ebf2",
-                wallStroke: "#4dd0e1",
-                breadcrumbA: "rgba(2, 119, 189, 0.36)",
-                breadcrumbB: "rgba(229, 57, 53, 0.34)",
-                pageBg: "#e0f7fa",
-                canvasBg: "#f0fcff",
-                textMain: "#1a3440",
-                labelColor: "#2c5364",
-                inputBorder: "#80deea",
-                canvasBorder: "#26c6da",
-                badgeBg: "rgba(255, 255, 255, 0.94)",
-                badgeText: "#0d3c4a",
-                btnBg: "#26c6da",
-                btnText: "#fff"
+                cellRoad: "#fff9e6",
+                cellWall: "#d4a84a",
+                breadcrumbA: "rgba(21, 101, 192, 0.38)",
+                breadcrumbB: "rgba(198, 40, 40, 0.38)",
+                pageBg: "#fff3d6",
+                canvasBg: "#fff8e8",
+                textMain: "#4a3200",
+                labelColor: "#5c3d00",
+                inputBorder: "#f0c96a",
+                canvasBorder: "#c49000",
+                badgeBg: "rgba(255, 252, 240, 0.96)",
+                badgeText: "#4a3200"
             },
             4: {
-                cellRoad: "#f6fbff",
-                cellWall: "#d7dee7",
-                wallStroke: "#5b6672",
-                breadcrumbA: "rgba(47, 128, 237, 0.38)",
-                breadcrumbB: "rgba(235, 87, 87, 0.38)",
-                pageBg: "#f4f6f9",
-                canvasBg: "#f7fbff",
-                textMain: "#1f2933",
-                labelColor: "#3f4957",
-                inputBorder: "#b7c2d0",
-                canvasBorder: "#6d7786",
-                badgeBg: "rgba(255, 255, 255, 0.92)",
-                badgeText: "#1f2933",
-                btnBg: "#4caf50",
-                btnText: "#fff"
+                cellRoad: "#fff0e0",
+                cellWall: "#c96d2d",
+                breadcrumbA: "rgba(13, 71, 161, 0.4)",
+                breadcrumbB: "rgba(183, 28, 28, 0.4)",
+                pageBg: "#ffe8d4",
+                canvasBg: "#fff2e6",
+                textMain: "#4a2100",
+                labelColor: "#5c2800",
+                inputBorder: "#ffb380",
+                canvasBorder: "#e65100",
+                badgeBg: "rgba(255, 248, 240, 0.95)",
+                badgeText: "#3d1a00"
             },
             5: {
-                cellRoad: "#1c2636",
-                cellWall: "#2d3a4d",
-                wallStroke: "#5c6b7e",
-                breadcrumbA: "rgba(100, 181, 246, 0.45)",
-                breadcrumbB: "rgba(239, 83, 80, 0.45)",
-                pageBg: "#0d1117",
-                canvasBg: "#151d2a",
-                textMain: "#eceff1",
-                labelColor: "#cfd8dc",
-                inputBorder: "#455a64",
-                canvasBorder: "#546e7a",
-                badgeBg: "rgba(30, 40, 55, 0.92)",
-                badgeText: "#eceff1",
-                btnBg: "#5c6bc0",
-                btnText: "#fff"
+                cellRoad: "#5c2224",
+                cellWall: "#2a0c0e",
+                breadcrumbA: "rgba(255, 213, 79, 0.5)",
+                breadcrumbB: "rgba(255, 138, 128, 0.5)",
+                pageBg: "#1a0a0b",
+                canvasBg: "#2a1214",
+                textMain: "#fce8e8",
+                labelColor: "#ffcdd2",
+                inputBorder: "#6d2a2e",
+                canvasBorder: "#b71c1c",
+                badgeBg: "rgba(60, 20, 22, 0.92)",
+                badgeText: "#ffebee"
             }
         };
-        var activeTheme = LEVEL_THEMES[4];
+        var activeTheme = LEVEL_THEMES[1];
+        var WALL_BLEED_PX = 0.6;
         var maze = [];
         var players = {};
         var goal = null;
@@ -244,19 +257,40 @@
         };
 
         function init() {
-            document.getElementById("resetBtn").addEventListener("click", function () {
-                generateMaze(false);
-            });
+            resetLevelBtn.addEventListener("click", onResetLevelClick);
+            nextLevelBtn.addEventListener("click", onNextLevelClick);
             window.addEventListener("keydown", onKeyDown);
             window.addEventListener("keyup", onKeyUp);
             startMoveLoop();
             applyLevelTheme(currentLevel);
-            generateMaze(true);
+            updateNextLevelButton();
+            loadMazeForCurrentLevel();
+        }
+
+        function onResetLevelClick() {
+            currentLevel = 1;
+            applyLevelTheme(currentLevel);
+            updateNextLevelButton();
+            loadMazeForCurrentLevel();
+        }
+
+        function onNextLevelClick() {
+            if (currentLevel >= MAX_LEVEL) {
+                return;
+            }
+            currentLevel += 1;
+            applyLevelTheme(currentLevel);
+            updateNextLevelButton();
+            loadMazeForCurrentLevel();
+        }
+
+        function updateNextLevelButton() {
+            nextLevelBtn.disabled = currentLevel >= MAX_LEVEL;
         }
 
         function applyLevelTheme(level) {
             var lv = level < 1 ? 1 : (level > MAX_LEVEL ? MAX_LEVEL : level);
-            activeTheme = LEVEL_THEMES[lv] || LEVEL_THEMES[4];
+            activeTheme = LEVEL_THEMES[lv] || LEVEL_THEMES[1];
             var root = document.documentElement;
             root.style.setProperty("--page-bg", activeTheme.pageBg);
             root.style.setProperty("--canvas-bg", activeTheme.canvasBg);
@@ -266,8 +300,6 @@
             root.style.setProperty("--canvas-border", activeTheme.canvasBorder);
             root.style.setProperty("--badge-bg", activeTheme.badgeBg);
             root.style.setProperty("--badge-text", activeTheme.badgeText);
-            root.style.setProperty("--btn-bg", activeTheme.btnBg);
-            root.style.setProperty("--btn-text", activeTheme.btnText);
             levelBadge.textContent = "Level: " + lv + "/" + MAX_LEVEL;
         }
 
@@ -322,11 +354,7 @@
             return null;
         }
 
-        function generateMaze(skipLevelIncrement) {
-            if (!skipLevelIncrement) {
-                currentLevel = currentLevel >= MAX_LEVEL ? 1 : currentLevel + 1;
-            }
-            applyLevelTheme(currentLevel);
+        function loadMazeForCurrentLevel() {
             inputLocked = false;
             winnerMessage = "";
             keyPressed = {};
@@ -348,12 +376,11 @@
             })
             .then(parseJson)
             .then(function (data) {
-                applyState(data);
                 if (data.gameOver) {
                     inputLocked = true;
                     winnerMessage = getWinnerMessage(data.winner);
-                    render();
                 }
+                applyState(data);
             })
             .catch(function () {});
         }
@@ -362,6 +389,7 @@
             if (typeof data.level === "number") {
                 currentLevel = data.level;
                 applyLevelTheme(currentLevel);
+                updateNextLevelButton();
             }
             if (data.maze) {
                 maze = data.maze;
@@ -390,33 +418,38 @@
             ctx.fillStyle = activeTheme.canvasBg;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            for (var y = 0; y < rows; y++) {
-                for (var x = 0; x < cols; x++) {
-                    drawCell(x, y, maze[y][x]);
-                }
-            }
+            drawMazeSeamless(rows, cols);
             drawBreadcrumbs();
-            drawWallOutline();
             drawGoal();
             drawPlayers();
             drawWinnerOverlay();
         }
 
-        function drawCell(x, y, value) {
-            var isWall = (value & 2) === 2;
-            ctx.fillStyle = isWall ? activeTheme.cellWall : activeTheme.cellRoad;
-            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-        }
-
-        function drawWallOutline() {
-            ctx.strokeStyle = activeTheme.wallStroke;
-            ctx.lineWidth = 1;
-            for (var y = 0; y < maze.length; y++) {
-                for (var x = 0; x < maze[0].length; x++) {
+        /**
+         * 先铺通路，再以略大于格子的实心块绘制墙体，消除相邻墙格之间的缝隙。
+         */
+        function drawMazeSeamless(rows, cols) {
+            var x;
+            var y;
+            var bleed = WALL_BLEED_PX;
+            ctx.fillStyle = activeTheme.cellRoad;
+            for (y = 0; y < rows; y++) {
+                for (x = 0; x < cols; x++) {
+                    if ((maze[y][x] & 2) !== 2) {
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+            ctx.fillStyle = activeTheme.cellWall;
+            for (y = 0; y < rows; y++) {
+                for (x = 0; x < cols; x++) {
                     if ((maze[y][x] & 2) === 2) {
-                        ctx.beginPath();
-                        ctx.rect(x * cellSize + 0.5, y * cellSize + 0.5, cellSize - 1, cellSize - 1);
-                        ctx.stroke();
+                        ctx.fillRect(
+                            x * cellSize - bleed,
+                            y * cellSize - bleed,
+                            cellSize + bleed * 2,
+                            cellSize + bleed * 2
+                        );
                     }
                 }
             }
@@ -464,21 +497,32 @@
         }
 
         function drawWinnerOverlay() {
-            if (!winnerMessage || !goal) {
+            if (!winnerMessage) {
                 return;
             }
-            var centerX = goal.x * cellSize + cellSize / 2;
-            var centerY = goal.y * cellSize + cellSize / 2;
-            var fontSize = Math.max(28, Math.floor(cellSize * 1.15));
+            var w = canvas.width;
+            var h = canvas.height;
+            var cx = w / 2;
+            var cy = h / 2;
+            var fontSize = Math.max(26, Math.min(42, Math.floor(Math.min(w, h) / 18)));
+
+            ctx.save();
+            ctx.fillStyle = "rgba(8, 10, 16, 0.74)";
+            ctx.fillRect(0, 0, w, h);
+
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.font = "bold " + fontSize + "px Arial";
-            ctx.fillStyle = "rgba(20, 20, 20, 0.35)";
-            ctx.fillText(winnerMessage, centerX + 3, centerY + 3);
-            ctx.fillStyle = "#ffd54f";
-            ctx.fillText(winnerMessage, centerX, centerY);
-            ctx.textAlign = "start";
-            ctx.textBaseline = "alphabetic";
+            ctx.font = "bold " + fontSize + "px Arial, sans-serif";
+            ctx.lineJoin = "round";
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.62)";
+            ctx.strokeText(winnerMessage, cx, cy);
+            ctx.shadowColor = "rgba(255, 213, 79, 0.85)";
+            ctx.shadowBlur = 20;
+            ctx.fillStyle = "#fffde7";
+            ctx.fillText(winnerMessage, cx, cy);
+            ctx.shadowBlur = 0;
+            ctx.restore();
         }
 
         function getWinnerMessage(winnerId) {
