@@ -78,6 +78,12 @@
             color: var(--text-main);
             transition: border-color 0.45s ease, color 0.45s ease, background-color 0.45s ease;
         }
+        .player-score {
+            margin-top: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #2f3a4a;
+        }
         canvas {
             width: 100%;
             max-width: 700px;
@@ -237,11 +243,13 @@
         <div class="player-panel">
             <label for="playerAName">玩家 A 名字</label>
             <input id="playerAName" type="text" value="玩家A" maxlength="16">
+            <div id="playerAScore" class="player-score">胜场：0</div>
         </div>
         <canvas id="mazeCanvas" width="700" height="700"></canvas>
         <div class="player-panel">
             <label for="playerBName">玩家 B 名字</label>
             <input id="playerBName" type="text" value="玩家B" maxlength="16">
+            <div id="playerBScore" class="player-score">胜场：0</div>
         </div>
     </div>
     <div class="panel">
@@ -259,6 +267,8 @@
         var ctx = canvas.getContext("2d");
         var playerAInput = document.getElementById("playerAName");
         var playerBInput = document.getElementById("playerBName");
+        var playerAScore = document.getElementById("playerAScore");
+        var playerBScore = document.getElementById("playerBScore");
         var levelBadge = document.getElementById("levelBadge");
         var resetLevelBtn = document.getElementById("resetLevelBtn");
         var nextLevelBtn = document.getElementById("nextLevelBtn");
@@ -364,6 +374,8 @@
         var cellSize = 24;
         var inputLocked = false;
         var winnerMessage = "";
+        var scoreBoard = {A: 0, B: 0};
+        var roundScoreRecorded = false;
         var keyPressed = {};
         var moveLoopId = null;
         var keyMapping = {
@@ -394,6 +406,7 @@
             window.addEventListener("keydown", onKeyDown);
             window.addEventListener("keyup", onKeyUp);
             startMoveLoop();
+            updateScoreDisplay();
             applyLevelTheme(currentLevel);
             updateNextLevelButton();
             window.addEventListener("resize", function () {
@@ -523,6 +536,7 @@
             }
             inputLocked = false;
             winnerMessage = "";
+            roundScoreRecorded = false;
             keyPressed = {};
             fetch("/api/maze/generate", {
                 method: "POST",
@@ -551,6 +565,7 @@
             .then(function (data) {
                 if (data.gameOver) {
                     inputLocked = true;
+                    updateScoreIfNeeded(data.winner);
                     winnerMessage = getWinnerMessage(data.winner);
                 }
                 applyState(data);
@@ -771,6 +786,23 @@
                 safeName = playerId === "A" ? "玩家A" : "玩家B";
             }
             return safeName;
+        }
+
+        function updateScoreIfNeeded(winnerId) {
+            if (roundScoreRecorded) {
+                return;
+            }
+            if (winnerId !== "A" && winnerId !== "B") {
+                return;
+            }
+            scoreBoard[winnerId] += 1;
+            roundScoreRecorded = true;
+            updateScoreDisplay();
+        }
+
+        function updateScoreDisplay() {
+            playerAScore.textContent = "胜场：" + scoreBoard.A;
+            playerBScore.textContent = "胜场：" + scoreBoard.B;
         }
 
         function showModeSelector() {
