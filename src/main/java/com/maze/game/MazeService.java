@@ -24,19 +24,18 @@ public class MazeService {
     private static final int MAX_RETRY = 300;
     /**
      * Canonical difficulty tiers: grid size and carving biases (branching / path winding).
-     * Level 4 is the fixed benchmark (21×21 logical cells, prior tuning). Sizes step by 2
-     * logical cells per level for a smoother curve; Level 5 is deliberately milder than before.
+     * Levels 1..5 use logical sizes 16..20 with conservative tuning to keep generation stable
+     * under wide-corridor budget constraints.
      */
     private static final Map<Integer, MazeLevelProfile> LEVEL_PROFILES_BY_NUMBER;
 
     static {
         Map<Integer, MazeLevelProfile> table = new HashMap<Integer, MazeLevelProfile>();
-        // 降低约15%难度：减小网格尺寸，降低转弯奖励使路径更直更短
-        table.put(1, new MazeLevelProfile(13, 13, 25, 7, 8, 0.08d, 95));
-        table.put(2, new MazeLevelProfile(15, 15, 35, 8, 12, 0.12d, 95));
-        table.put(3, new MazeLevelProfile(17, 17, 45, 9, 16, 0.16d, 95));
-        table.put(4, new MazeLevelProfile(19, 19, 52, 10, 20, 0.20d, 95));
-        table.put(5, new MazeLevelProfile(21, 21, 58, 10, 24, 0.24d, 95));
+        table.put(1, new MazeLevelProfile(13, 13, 25, 7, 12, 0.08d, 95));
+        table.put(2, new MazeLevelProfile(15, 15, 35, 8, 18, 0.12d, 95));
+        table.put(3, new MazeLevelProfile(17, 17, 45, 9, 24, 0.16d, 95));
+        table.put(4, new MazeLevelProfile(19, 19, 52, 10, 30, 0.20d, 95));
+        table.put(5, new MazeLevelProfile(21, 21, 58, 10, 36, 0.24d, 95));
         LEVEL_PROFILES_BY_NUMBER = Collections.unmodifiableMap(table);
     }
 
@@ -61,15 +60,18 @@ public class MazeService {
     }
 
     public GameState generate(Integer requestedCols, Integer requestedRows, Integer level) {
+        int resolvedLevel;
         MazeLevelProfile profile;
         if (level != null) {
-            int resolved = clampLevel(level);
-            profile = LEVEL_PROFILES_BY_NUMBER.get(resolved);
+            resolvedLevel = clampLevel(level);
+            profile = LEVEL_PROFILES_BY_NUMBER.get(resolvedLevel);
         } else {
+            resolvedLevel = DEFAULT_LEVEL;
             int cols = normalizeSize(requestedCols, DEFAULT_COLS);
             int rows = normalizeSize(requestedRows, DEFAULT_ROWS);
             profile = LEVEL_PROFILES_BY_NUMBER.get(DEFAULT_LEVEL).withLogicalGrid(cols, rows);
         }
+        int wideCorridorBudget = getWideCorridorBudget(resolvedLevel);
         int cols = profile.getLogicalCols();
         int rows = profile.getLogicalRows();
         int width = cols * 2 + 1;
@@ -78,7 +80,9 @@ public class MazeService {
         for (int i = 0; i < MAX_RETRY; i++) {
             int[][] maze = createMazeBuffer(width, height);
             boolean[][] visited = new boolean[rows][cols];
-            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, profile);
+            int[] usedWideCorridorBudget = new int[] {0};
+            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, profile,
+                    wideCorridorBudget, usedWideCorridorBudget);
             if (!allLogicalCellsVisited(visited)) {
                 continue;
             }
@@ -87,7 +91,11 @@ public class MazeService {
             maze[goal.getY()][goal.getX()] = MazeCellState.ROAD;
             applyBoundaryLockdown(maze);
             openEntriesAtMiddle(maze, middleY);
-            if (wouldCreateWideOpenCorridor(maze)) {
+            openGoalApproaches(maze, goal);
+            if (wouldCreateSolid2x2Block(maze)) {
+                continue;
+            }
+            if (countSolid2x3Blocks(maze) > wideCorridorBudget) {
                 continue;
             }
 
@@ -114,9 +122,6 @@ public class MazeService {
             return new MoveResult(false, state.isGameOver(), state.getWinner());
         }
         if ((state.getMaze()[nextY][nextX] & MazeCellState.WALL) == MazeCellState.WALL) {
-            return new MoveResult(false, state.isGameOver(), state.getWinner());
-        }
-        if (state.isOccupiedByOther(playerId, nextX, nextY)) {
             return new MoveResult(false, state.isGameOver(), state.getWinner());
         }
         state.movePlayer(playerId, nextX, nextY);
@@ -176,7 +181,8 @@ public class MazeService {
     }
 
     private void carveByRecursiveBacktracking(int cellX, int cellY, boolean[][] visited, int[][] maze,
-                                              Direction previousDirection, MazeLevelProfile profile) {
+                                              Direction previousDirection, MazeLevelProfile profile,
+                                              int wideCorridorBudget, int[] usedWideCorridorBudget) {
         visited[cellY][cellX] = true;
         int mazeX = cellX * 2 + 1;
         int mazeY = cellY * 2 + 1;
@@ -193,34 +199,45 @@ public class MazeService {
             int wallY = mazeY + direction.getDy();
             int nextMazeX = nextCellX * 2 + 1;
             int nextMazeY = nextCellY * 2 + 1;
-            if (!canOpenConnector(maze, wallX, wallY, nextMazeX, nextMazeY)) {
+            if (!canOpenConnector(maze, wallX, wallY, nextMazeX, nextMazeY,
+                    wideCorridorBudget, usedWideCorridorBudget)) {
                 continue;
             }
             maze[wallY][wallX] = MazeCellState.ROAD;
             maze[nextMazeY][nextMazeX] = MazeCellState.ROAD;
-            carveByRecursiveBacktracking(nextCellX, nextCellY, visited, maze, direction, profile);
+            carveByRecursiveBacktracking(nextCellX, nextCellY, visited, maze, direction, profile,
+                    wideCorridorBudget, usedWideCorridorBudget);
         }
     }
 
     /**
      * Before carving a connector, simulate opening the wall cell and the next cell center.
-     * Rejects if that would create a solid 2x2 or 2x3 block of traversable cells (path wider than one cell).
+     * Hard reject 2x2 blocks. 2x3 / 3x2 blocks consume a per-level budget.
      */
-    private boolean canOpenConnector(int[][] maze, int wallX, int wallY, int nextMazeX, int nextMazeY) {
+    private boolean canOpenConnector(int[][] maze, int wallX, int wallY, int nextMazeX, int nextMazeY,
+                                     int wideCorridorBudget, int[] usedWideCorridorBudget) {
         if (!isInside(wallX, wallY, maze) || !isInside(nextMazeX, nextMazeY, maze)) {
             return false;
         }
+        int beforeSolid2x3 = countSolid2x3Blocks(maze);
         int oldWall = maze[wallY][wallX];
         int oldNext = maze[nextMazeY][nextMazeX];
         maze[wallY][wallX] = MazeCellState.ROAD;
         maze[nextMazeY][nextMazeX] = MazeCellState.ROAD;
-        boolean ok = !wouldCreateWideOpenCorridor(maze);
+        boolean ok = false;
+        if (!wouldCreateSolid2x2Block(maze)) {
+            int createdSolid2x3 = Math.max(0, countSolid2x3Blocks(maze) - beforeSolid2x3);
+            if (usedWideCorridorBudget[0] + createdSolid2x3 <= wideCorridorBudget) {
+                usedWideCorridorBudget[0] += createdSolid2x3;
+                ok = true;
+            }
+        }
         maze[wallY][wallX] = oldWall;
         maze[nextMazeY][nextMazeX] = oldNext;
         return ok;
     }
 
-    private boolean wouldCreateWideOpenCorridor(int[][] maze) {
+    private boolean wouldCreateSolid2x2Block(int[][] maze) {
         int h = maze.length;
         int w = maze[0].length;
         for (int y = 0; y < h - 1; y++) {
@@ -231,12 +248,19 @@ public class MazeService {
                 }
             }
         }
+        return false;
+    }
+
+    private int countSolid2x3Blocks(int[][] maze) {
+        int h = maze.length;
+        int w = maze[0].length;
+        int count = 0;
         for (int y = 0; y < h - 1; y++) {
             for (int x = 0; x < w - 2; x++) {
                 if (isTraversable(maze, x, y) && isTraversable(maze, x + 1, y) && isTraversable(maze, x + 2, y)
                         && isTraversable(maze, x, y + 1) && isTraversable(maze, x + 1, y + 1)
                         && isTraversable(maze, x + 2, y + 1)) {
-                    return true;
+                    count++;
                 }
             }
         }
@@ -245,11 +269,11 @@ public class MazeService {
                 if (isTraversable(maze, x, y) && isTraversable(maze, x + 1, y)
                         && isTraversable(maze, x, y + 1) && isTraversable(maze, x + 1, y + 1)
                         && isTraversable(maze, x, y + 2) && isTraversable(maze, x + 1, y + 2)) {
-                    return true;
+                    count++;
                 }
             }
         }
-        return false;
+        return count;
     }
 
     private boolean isTraversable(int[][] maze, int x, int y) {
@@ -323,6 +347,27 @@ public class MazeService {
         maze[middleY][1] = MazeCellState.ROAD;
         maze[middleY][width - 1] = MazeCellState.ROAD;
         maze[middleY][width - 2] = MazeCellState.ROAD;
+    }
+
+    private void openGoalApproaches(int[][] maze, MazePoint goal) {
+        for (Direction direction : Direction.values()) {
+            int nx = goal.getX() + direction.getDx();
+            int ny = goal.getY() + direction.getDy();
+            if (!isInside(nx, ny, maze)) {
+                continue;
+            }
+            maze[ny][nx] = MazeCellState.ROAD;
+        }
+    }
+
+    private int getWideCorridorBudget(int level) {
+        if (level <= 2) {
+            return 1;
+        }
+        if (level <= 4) {
+            return 2;
+        }
+        return 3;
     }
 
     /**

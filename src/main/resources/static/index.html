@@ -522,6 +522,12 @@
         }
 
         function drawPlayers() {
+            var playerA = players.A;
+            var playerB = players.B;
+            if (playerA && playerB && playerA.x === playerB.x && playerA.y === playerB.y) {
+                drawOverlappedPlayers(playerA);
+                return;
+            }
             drawPlayer("A", "#2f80ed");
             drawPlayer("B", "#eb5757");
         }
@@ -534,6 +540,23 @@
             ctx.fillStyle = color;
             ctx.beginPath();
             ctx.arc(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2, cellSize / 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawOverlappedPlayers(position) {
+            var cx = position.x * cellSize + cellSize / 2;
+            var cy = position.y * cellSize + cellSize / 2;
+            var splitOffset = cellSize * 0.18;
+            var radius = cellSize / 3.3;
+
+            ctx.fillStyle = "#2f80ed";
+            ctx.beginPath();
+            ctx.arc(cx - splitOffset, cy, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#eb5757";
+            ctx.beginPath();
+            ctx.arc(cx + splitOffset, cy, radius, 0, Math.PI * 2);
             ctx.fill();
         }
 
