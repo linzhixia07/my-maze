@@ -31,11 +31,12 @@ public class MazeService {
 
     static {
         Map<Integer, MazeLevelProfile> table = new HashMap<Integer, MazeLevelProfile>();
-        table.put(1, new MazeLevelProfile(15, 15, 20, 6, 13, 0.10d, 95));
-        table.put(2, new MazeLevelProfile(17, 17, 30, 7, 17, 0.16d, 95));
-        table.put(3, new MazeLevelProfile(19, 19, 40, 9, 22, 0.22d, 95));
-        table.put(4, new MazeLevelProfile(21, 21, 48, 10, 28, 0.28d, 95));
-        table.put(5, new MazeLevelProfile(23, 23, 54, 10, 31, 0.32d, 95));
+        // 降低约15%难度：减小网格尺寸，降低转弯奖励使路径更直更短
+        table.put(1, new MazeLevelProfile(13, 13, 25, 7, 8, 0.08d, 95));
+        table.put(2, new MazeLevelProfile(15, 15, 35, 8, 12, 0.12d, 95));
+        table.put(3, new MazeLevelProfile(17, 17, 45, 9, 16, 0.16d, 95));
+        table.put(4, new MazeLevelProfile(19, 19, 52, 10, 20, 0.20d, 95));
+        table.put(5, new MazeLevelProfile(21, 21, 58, 10, 24, 0.24d, 95));
         LEVEL_PROFILES_BY_NUMBER = Collections.unmodifiableMap(table);
     }
 
