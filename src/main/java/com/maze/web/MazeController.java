@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 public class MazeController {
     private static final String SESSION_KEY = "maze-state";
     private static final String SESSION_LEVEL_KEY = "maze-level";
+    private static final String SESSION_MODE_KEY = "maze-mode";
     private final MazeService mazeService;
 
     public MazeController(MazeService mazeService) {
@@ -38,11 +39,14 @@ public class MazeController {
         Integer cols = request == null ? null : request.getCols();
         Integer rows = request == null ? null : request.getRows();
         Integer level = request == null ? null : request.getLevel();
-        GameState state = mazeService.generate(cols, rows, level);
-        int appliedLevel = mazeService.clampLevel(level);
+        String gameMode = request == null ? null : request.getGameMode();
+        String appliedMode = normalizeGameMode(gameMode);
+        GameState state = mazeService.generate(cols, rows, level, appliedMode);
+        int appliedLevel = MazeService.MODE_CHASE.equals(appliedMode) ? 1 : mazeService.clampLevel(level);
         session.setAttribute(SESSION_KEY, state);
         session.setAttribute(SESSION_LEVEL_KEY, appliedLevel);
-        return MazeResponse.from(state, true, true, null, appliedLevel);
+        session.setAttribute(SESSION_MODE_KEY, appliedMode);
+        return MazeResponse.from(state, true, true, null, appliedLevel, appliedMode);
     }
 
     @PostMapping("/move")
@@ -56,11 +60,14 @@ public class MazeController {
         }
         Direction direction = parseDirection(request.getDirection());
         PlayerId playerId = parsePlayerId(request.getPlayerId());
+        PlayerId chaseChaserId = request.getChaseChaserId() == null ? null : parsePlayerId(request.getChaseChaserId());
         state.getLock().lock();
         try {
-            MazeService.MoveResult moveResult = mazeService.tryMove(state, playerId, direction);
+            String gameMode = (String) session.getAttribute(SESSION_MODE_KEY);
+            String appliedMode = normalizeGameMode(gameMode);
+            MazeService.MoveResult moveResult = mazeService.tryMove(state, playerId, direction, appliedMode, chaseChaserId);
             Integer appliedLevel = (Integer) session.getAttribute(SESSION_LEVEL_KEY);
-            return MazeResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner(), appliedLevel);
+            return MazeResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner(), appliedLevel, appliedMode);
         } finally {
             state.getLock().unlock();
         }
@@ -82,10 +89,22 @@ public class MazeController {
         }
     }
 
+    private String normalizeGameMode(String value) {
+        if (value == null) {
+            return MazeService.MODE_TWIN_RACE;
+        }
+        String normalized = value.trim().toUpperCase();
+        if (MazeService.MODE_CHASE.equals(normalized)) {
+            return MazeService.MODE_CHASE;
+        }
+        return MazeService.MODE_TWIN_RACE;
+    }
+
     public static class GenerateRequest {
         private Integer cols;
         private Integer rows;
         private Integer level;
+        private String gameMode;
 
         public Integer getCols() {
             return cols;
@@ -110,11 +129,20 @@ public class MazeController {
         public void setLevel(Integer level) {
             this.level = level;
         }
+
+        public String getGameMode() {
+            return gameMode;
+        }
+
+        public void setGameMode(String gameMode) {
+            this.gameMode = gameMode;
+        }
     }
 
     public static class MoveRequest {
         private String direction;
         private String playerId;
+        private String chaseChaserId;
 
         public String getDirection() {
             return direction;
@@ -131,6 +159,14 @@ public class MazeController {
         public void setPlayerId(String playerId) {
             this.playerId = playerId;
         }
+
+        public String getChaseChaserId() {
+            return chaseChaserId;
+        }
+
+        public void setChaseChaserId(String chaseChaserId) {
+            this.chaseChaserId = chaseChaserId;
+        }
     }
 
     public static class MazeResponse {
@@ -142,9 +178,10 @@ public class MazeController {
         private boolean gameOver;
         private String winner;
         private int level;
+        private String gameMode;
 
         public static MazeResponse from(GameState state, boolean moved, boolean includeMaze, PlayerId winnerId,
-                                        Integer level) {
+                                        Integer level, String gameMode) {
             MazeResponse response = new MazeResponse();
             response.maze = includeMaze ? state.getMaze() : null;
             response.goal = new PointDto(state.getGoal().getX(), state.getGoal().getY());
@@ -160,6 +197,7 @@ public class MazeController {
             response.winner = winnerId == null && state.getWinner() != null ? state.getWinner().name()
                     : winnerId == null ? null : winnerId.name();
             response.level = level == null ? MazeService.DEFAULT_LEVEL : level;
+            response.gameMode = gameMode == null ? MazeService.MODE_TWIN_RACE : gameMode;
             return response;
         }
 
@@ -193,6 +231,10 @@ public class MazeController {
 
         public int getLevel() {
             return level;
+        }
+
+        public String getGameMode() {
+            return gameMode;
         }
     }
 

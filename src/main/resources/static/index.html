@@ -125,9 +125,112 @@
             opacity: 0.45;
             cursor: not-allowed;
         }
+        .chase-controls {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            color: #2f3a4a;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .btn-toggle-chaser {
+            color: #fff;
+        }
+        .btn-toggle-chaser.is-blue {
+            background: #2f80ed;
+        }
+        .btn-toggle-chaser.is-blue:hover:not(:disabled) {
+            background: #1f6fd6;
+        }
+        .btn-toggle-chaser.is-red {
+            background: #d64545;
+        }
+        .btn-toggle-chaser.is-red:hover:not(:disabled) {
+            background: #bf3434;
+        }
+        .chase-status {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        .mode-selector-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 13, 20, 0.72);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+        .mode-selector-dialog {
+            width: min(92vw, 560px);
+            background: #ffffff;
+            border-radius: 14px;
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+            padding: 24px 22px;
+            text-align: left;
+            color: #1f2933;
+        }
+        .mode-selector-dialog h2 {
+            margin: 0 0 10px;
+            font-size: 24px;
+        }
+        .mode-selector-dialog p {
+            margin: 0 0 16px;
+            color: #3f4957;
+            line-height: 1.5;
+        }
+        .mode-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .mode-actions button {
+            flex: 1 1 220px;
+            border: none;
+            border-radius: 10px;
+            padding: 14px 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: bold;
+            color: #fff;
+            transition: transform 0.12s ease, opacity 0.2s ease;
+        }
+        .mode-actions button:active {
+            transform: scale(0.98);
+        }
+        .btn-mode-race {
+            background: #2f80ed;
+        }
+        .btn-mode-chase {
+            background: #d64545;
+        }
+        .mode-note {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #54606f;
+        }
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
+<div id="modeSelectorOverlay" class="mode-selector-overlay">
+    <div class="mode-selector-dialog">
+        <h2>选择游戏模式</h2>
+        <p>请选择一场冒险：双人竞速冲向奖杯，或开启抓人追逃对决。</p>
+        <div class="mode-actions">
+            <button type="button" id="modeTwinRaceBtn" class="btn-mode-race">模式 A：双人迷宫 (Twin Race)</button>
+            <button type="button" id="modeChaseBtn" class="btn-mode-chase">模式 B：抓人游戏 (The Chase)</button>
+        </div>
+        <div class="mode-note">提示：重置关卡会按当前模式重新开局，不会返回此选择界面。</div>
+    </div>
+</div>
 <div class="game">
     <div id="levelBadge" class="level-badge">Level: 1/5</div>
     <div class="arena">
@@ -145,6 +248,10 @@
         <button type="button" id="resetLevelBtn" class="btn-reset-level">重置关卡</button>
         <button type="button" id="nextLevelBtn" class="btn-next-level">下一关</button>
     </div>
+    <div id="chaseControls" class="chase-controls hidden">
+        <button type="button" id="toggleChaserBtn" class="btn-toggle-chaser">切换为红色方抓人</button>
+        <div id="chaseStatus" class="chase-status">当前抓人方：蓝色方</div>
+    </div>
 </div>
 <script>
     (function () {
@@ -155,8 +262,19 @@
         var levelBadge = document.getElementById("levelBadge");
         var resetLevelBtn = document.getElementById("resetLevelBtn");
         var nextLevelBtn = document.getElementById("nextLevelBtn");
+        var modeSelectorOverlay = document.getElementById("modeSelectorOverlay");
+        var modeTwinRaceBtn = document.getElementById("modeTwinRaceBtn");
+        var modeChaseBtn = document.getElementById("modeChaseBtn");
+        var chaseControls = document.getElementById("chaseControls");
+        var toggleChaserBtn = document.getElementById("toggleChaserBtn");
+        var chaseStatus = document.getElementById("chaseStatus");
+        var MODE_TWIN_RACE = "TWIN_RACE";
+        var MODE_CHASE = "CHASE";
         var MAX_LEVEL = 5;
+        var CHASE_FIXED_LEVEL = 1;
         var currentLevel = 1;
+        var currentGameMode = null;
+        var chaseChaserPlayerId = "A";
         /**
          * 难度配色：绿→黄→橙→红。cellRoad 为浅色可走面，cellWall 为同色相的深色实体墙，高对比便于识别。
          */
@@ -266,6 +384,13 @@
         function init() {
             resetLevelBtn.addEventListener("click", onResetLevelClick);
             nextLevelBtn.addEventListener("click", onNextLevelClick);
+            modeTwinRaceBtn.addEventListener("click", function () {
+                selectGameMode(MODE_TWIN_RACE);
+            });
+            modeChaseBtn.addEventListener("click", function () {
+                selectGameMode(MODE_CHASE);
+            });
+            toggleChaserBtn.addEventListener("click", onToggleChaserClick);
             window.addEventListener("keydown", onKeyDown);
             window.addEventListener("keyup", onKeyUp);
             startMoveLoop();
@@ -276,17 +401,29 @@
                     render();
                 }
             });
-            loadMazeForCurrentLevel();
+            showModeSelector();
         }
 
         function onResetLevelClick() {
-            currentLevel = 1;
+            if (!currentGameMode) {
+                return;
+            }
+            if (currentGameMode === MODE_CHASE) {
+                chaseChaserPlayerId = Math.random() < 0.5 ? "A" : "B";
+            }
+            currentLevel = currentGameMode === MODE_CHASE ? CHASE_FIXED_LEVEL : 1;
             applyLevelTheme(currentLevel);
             updateNextLevelButton();
             loadMazeForCurrentLevel();
         }
 
         function onNextLevelClick() {
+            if (!currentGameMode) {
+                return;
+            }
+            if (currentGameMode === MODE_CHASE) {
+                return;
+            }
             if (currentLevel >= MAX_LEVEL) {
                 return;
             }
@@ -297,6 +434,16 @@
         }
 
         function updateNextLevelButton() {
+            if (currentGameMode === MODE_CHASE) {
+                nextLevelBtn.classList.add("hidden");
+                resetLevelBtn.textContent = "重置游戏";
+                chaseControls.classList.remove("hidden");
+                updateChaseStatusText();
+                return;
+            }
+            nextLevelBtn.classList.remove("hidden");
+            resetLevelBtn.textContent = "重置关卡";
+            chaseControls.classList.add("hidden");
             nextLevelBtn.disabled = currentLevel >= MAX_LEVEL;
         }
 
@@ -312,7 +459,11 @@
             root.style.setProperty("--canvas-border", activeTheme.canvasBorder);
             root.style.setProperty("--badge-bg", activeTheme.badgeBg);
             root.style.setProperty("--badge-text", activeTheme.badgeText);
-            levelBadge.textContent = "Level: " + lv + "/" + MAX_LEVEL;
+            if (currentGameMode === MODE_CHASE) {
+                levelBadge.textContent = "抓人模式 | 固定地图 19";
+            } else {
+                levelBadge.textContent = "Level: " + lv + "/" + MAX_LEVEL;
+            }
         }
 
         function onKeyDown(event) {
@@ -367,13 +518,19 @@
         }
 
         function loadMazeForCurrentLevel() {
+            if (!currentGameMode) {
+                return;
+            }
             inputLocked = false;
             winnerMessage = "";
             keyPressed = {};
             fetch("/api/maze/generate", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({level: currentLevel})
+                body: JSON.stringify({
+                    level: currentGameMode === MODE_CHASE ? CHASE_FIXED_LEVEL : currentLevel,
+                    gameMode: currentGameMode
+                })
             })
             .then(parseJson)
             .then(applyState)
@@ -384,7 +541,11 @@
             return fetch("/api/maze/move", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({playerId: action.playerId, direction: action.direction})
+                body: JSON.stringify({
+                    playerId: action.playerId,
+                    direction: action.direction,
+                    chaseChaserId: currentGameMode === MODE_CHASE ? chaseChaserPlayerId : null
+                })
             })
             .then(parseJson)
             .then(function (data) {
@@ -401,8 +562,11 @@
             if (typeof data.level === "number") {
                 currentLevel = data.level;
                 applyLevelTheme(currentLevel);
-                updateNextLevelButton();
             }
+            if (typeof data.gameMode === "string" && data.gameMode) {
+                currentGameMode = data.gameMode;
+            }
+            updateNextLevelButton();
             if (data.maze) {
                 maze = data.maze;
             }
@@ -590,12 +754,66 @@
         }
 
         function getWinnerMessage(winnerId) {
-            var name = winnerId === "A" ? playerAInput.value : playerBInput.value;
+            var name = getPlayerDisplayName(winnerId);
+            if (currentGameMode === MODE_CHASE) {
+                if (winnerId === chaseChaserPlayerId) {
+                    return name + " 成功抓获目标，获得胜利！";
+                }
+                return name + " 成功夺取火焰杯，获得胜利！";
+            }
+            return name + " 获得了胜利！";
+        }
+
+        function getPlayerDisplayName(playerId) {
+            var name = playerId === "A" ? playerAInput.value : playerBInput.value;
             var safeName = (name || "").trim();
             if (!safeName) {
-                safeName = winnerId === "A" ? "玩家A" : "玩家B";
+                safeName = playerId === "A" ? "玩家A" : "玩家B";
             }
-            return safeName + " 获得了胜利！";
+            return safeName;
+        }
+
+        function showModeSelector() {
+            modeSelectorOverlay.classList.remove("hidden");
+            inputLocked = true;
+        }
+
+        function selectGameMode(mode) {
+            currentGameMode = mode;
+            if (mode === MODE_CHASE) {
+                chaseChaserPlayerId = Math.random() < 0.5 ? "A" : "B";
+            }
+            modeSelectorOverlay.classList.add("hidden");
+            inputLocked = false;
+            currentLevel = mode === MODE_CHASE ? CHASE_FIXED_LEVEL : 1;
+            applyLevelTheme(currentLevel);
+            updateNextLevelButton();
+            loadMazeForCurrentLevel();
+        }
+
+        function onToggleChaserClick() {
+            if (currentGameMode !== MODE_CHASE) {
+                return;
+            }
+            chaseChaserPlayerId = chaseChaserPlayerId === "A" ? "B" : "A";
+            updateChaseStatusText();
+        }
+
+        function updateChaseStatusText() {
+            if (currentGameMode !== MODE_CHASE) {
+                return;
+            }
+            toggleChaserBtn.classList.remove("is-blue");
+            toggleChaserBtn.classList.remove("is-red");
+            if (chaseChaserPlayerId === "A") {
+                toggleChaserBtn.classList.add("is-blue");
+                chaseStatus.textContent = "当前抓人方：蓝色方";
+                toggleChaserBtn.textContent = "切换为红色方抓人";
+            } else {
+                toggleChaserBtn.classList.add("is-red");
+                chaseStatus.textContent = "当前抓人方：红色方";
+                toggleChaserBtn.textContent = "切换为蓝色方抓人";
+            }
         }
 
         init();

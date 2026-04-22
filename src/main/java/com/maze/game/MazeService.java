@@ -14,6 +14,11 @@ import java.util.Random;
 
 @Service
 public class MazeService {
+    public static final String MODE_TWIN_RACE = "TWIN_RACE";
+    public static final String MODE_CHASE = "CHASE";
+    private static final int CHASE_FIXED_LOGICAL_SIZE = 19;
+    private static final int CHASE_MIN_INITIAL_DISTANCE = 8;
+    private static final int CHASE_MAX_INITIAL_DISTANCE = 10;
     private static final int DEFAULT_COLS = 21;
     private static final int DEFAULT_ROWS = 21;
     private static final int MIN_SIZE = 11;
@@ -56,10 +61,18 @@ public class MazeService {
     }
 
     public GameState generate(Integer requestedCols, Integer requestedRows) {
-        return generate(requestedCols, requestedRows, null);
+        return generate(requestedCols, requestedRows, null, MODE_TWIN_RACE);
     }
 
     public GameState generate(Integer requestedCols, Integer requestedRows, Integer level) {
+        return generate(requestedCols, requestedRows, level, MODE_TWIN_RACE);
+    }
+
+    public GameState generate(Integer requestedCols, Integer requestedRows, Integer level, String gameMode) {
+        String resolvedMode = normalizeGameMode(gameMode);
+        if (MODE_CHASE.equals(resolvedMode)) {
+            return generateChaseGameState();
+        }
         int resolvedLevel;
         MazeLevelProfile profile;
         if (level != null) {
@@ -91,7 +104,7 @@ public class MazeService {
             maze[goal.getY()][goal.getX()] = MazeCellState.ROAD;
             applyBoundaryLockdown(maze);
             openEntriesAtMiddle(maze, middleY);
-            openGoalApproaches(maze, goal);
+            openGoalArea(maze, goal, false);
             if (wouldCreateSolid2x2Block(maze)) {
                 continue;
             }
@@ -112,6 +125,15 @@ public class MazeService {
     }
 
     public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction) {
+        return tryMove(state, playerId, direction, MODE_TWIN_RACE, null);
+    }
+
+    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction, String gameMode) {
+        return tryMove(state, playerId, direction, gameMode, null);
+    }
+
+    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction, String gameMode, PlayerId chaseChaserId) {
+        String resolvedMode = normalizeGameMode(gameMode);
         if (state.isGameOver()) {
             return new MoveResult(false, true, state.getWinner());
         }
@@ -125,7 +147,17 @@ public class MazeService {
             return new MoveResult(false, state.isGameOver(), state.getWinner());
         }
         state.movePlayer(playerId, nextX, nextY);
-        if (nextX == state.getGoal().getX() && nextY == state.getGoal().getY()) {
+        if (MODE_CHASE.equals(resolvedMode)) {
+            PlayerId chaserId = chaseChaserId == null ? PlayerId.A : chaseChaserId;
+            PlayerId runnerId = chaserId == PlayerId.A ? PlayerId.B : PlayerId.A;
+            Player playerA = state.getPlayer(PlayerId.A);
+            Player playerB = state.getPlayer(PlayerId.B);
+            if (playerA.getX() == playerB.getX() && playerA.getY() == playerB.getY()) {
+                state.setWinner(chaserId);
+            } else if (playerId == runnerId && nextX == state.getGoal().getX() && nextY == state.getGoal().getY()) {
+                state.setWinner(runnerId);
+            }
+        } else if (nextX == state.getGoal().getX() && nextY == state.getGoal().getY()) {
             state.setWinner(playerId);
         }
         return new MoveResult(true, state.isGameOver(), state.getWinner());
@@ -349,7 +381,17 @@ public class MazeService {
         maze[middleY][width - 2] = MazeCellState.ROAD;
     }
 
-    private void openGoalApproaches(int[][] maze, MazePoint goal) {
+    private void openGoalArea(int[][] maze, MazePoint goal, boolean enableCenterPlaza) {
+        if (enableCenterPlaza) {
+            for (int y = goal.getY() - 1; y <= goal.getY() + 1; y++) {
+                for (int x = goal.getX() - 1; x <= goal.getX() + 1; x++) {
+                    if (isInside(x, y, maze)) {
+                        maze[y][x] = MazeCellState.ROAD;
+                    }
+                }
+            }
+            return;
+        }
         for (Direction direction : Direction.values()) {
             int nx = goal.getX() + direction.getDx();
             int ny = goal.getY() + direction.getDy();
@@ -384,6 +426,9 @@ public class MazeService {
     }
 
     private int bfsShortestDistance(int[][] maze, MazePoint start, MazePoint goal) {
+        if ((maze[start.getY()][start.getX()] & MazeCellState.WALL) == MazeCellState.WALL) {
+            return -1;
+        }
         int[][] dist = new int[maze.length][maze[0].length];
         for (int y = 0; y < dist.length; y++) {
             for (int x = 0; x < dist[0].length; x++) {
@@ -412,6 +457,148 @@ public class MazeService {
             }
         }
         return -1;
+    }
+
+    private String normalizeGameMode(String gameMode) {
+        if (gameMode == null) {
+            return MODE_TWIN_RACE;
+        }
+        String normalized = gameMode.trim().toUpperCase();
+        if (MODE_CHASE.equals(normalized)) {
+            return MODE_CHASE;
+        }
+        return MODE_TWIN_RACE;
+    }
+
+    private MazePoint pickChaseRunnerSpawn(int[][] maze, MazePoint goal) {
+        List<MazePoint> allTraversable = new ArrayList<MazePoint>();
+        List<Integer> allDistances = new ArrayList<Integer>();
+        int farthestDistance = -1;
+        for (int y = 1; y < maze.length - 1; y++) {
+            for (int x = 1; x < maze[0].length - 1; x++) {
+                if ((maze[y][x] & MazeCellState.WALL) == MazeCellState.WALL) {
+                    continue;
+                }
+                if (x == goal.getX() && y == goal.getY()) {
+                    continue;
+                }
+                int dist = bfsShortestDistance(maze, new MazePoint(x, y), goal);
+                if (dist > 0) {
+                    allTraversable.add(new MazePoint(x, y));
+                    allDistances.add(dist);
+                    farthestDistance = Math.max(farthestDistance, dist);
+                }
+            }
+        }
+        if (allTraversable.isEmpty()) {
+            return null;
+        }
+        List<MazePoint> strongCandidates = new ArrayList<MazePoint>();
+        int strongThreshold = Math.max(6, farthestDistance - 6);
+        for (int i = 0; i < allTraversable.size(); i++) {
+            if (allDistances.get(i) >= strongThreshold) {
+                strongCandidates.add(allTraversable.get(i));
+            }
+        }
+        if (!strongCandidates.isEmpty()) {
+            Collections.shuffle(strongCandidates, random);
+            return strongCandidates.get(0);
+        }
+        Collections.shuffle(allTraversable, random);
+        return allTraversable.get(0);
+    }
+
+    private MazePoint pickChaserSpawn(int[][] maze, MazePoint runner) {
+        List<MazePoint> idealCandidates = new ArrayList<MazePoint>();
+        List<MazePoint> nearCandidates = new ArrayList<MazePoint>();
+        List<MazePoint> fallbackCandidates = new ArrayList<MazePoint>();
+        for (int y = 1; y < maze.length - 1; y++) {
+            for (int x = 1; x < maze[0].length - 1; x++) {
+                if ((maze[y][x] & MazeCellState.WALL) == MazeCellState.WALL) {
+                    continue;
+                }
+                if (x == runner.getX() && y == runner.getY()) {
+                    continue;
+                }
+                int toRunner = bfsShortestDistance(maze, new MazePoint(x, y), runner);
+                if (toRunner >= CHASE_MIN_INITIAL_DISTANCE && toRunner <= CHASE_MAX_INITIAL_DISTANCE) {
+                    idealCandidates.add(new MazePoint(x, y));
+                } else if (toRunner >= CHASE_MIN_INITIAL_DISTANCE - 1 && toRunner <= CHASE_MAX_INITIAL_DISTANCE + 1) {
+                    nearCandidates.add(new MazePoint(x, y));
+                } else if (toRunner > 1) {
+                    fallbackCandidates.add(new MazePoint(x, y));
+                }
+            }
+        }
+        if (!idealCandidates.isEmpty()) {
+            Collections.shuffle(idealCandidates, random);
+            return idealCandidates.get(0);
+        }
+        if (!nearCandidates.isEmpty()) {
+            Collections.shuffle(nearCandidates, random);
+            return nearCandidates.get(0);
+        }
+        if (!fallbackCandidates.isEmpty()) {
+            Collections.shuffle(fallbackCandidates, random);
+            return fallbackCandidates.get(0);
+        }
+        return null;
+    }
+
+    private GameState generateChaseGameState() {
+        MazeLevelProfile chaseProfile = LEVEL_PROFILES_BY_NUMBER.get(DEFAULT_LEVEL)
+                .withLogicalGrid(CHASE_FIXED_LOGICAL_SIZE, CHASE_FIXED_LOGICAL_SIZE);
+        int cols = chaseProfile.getLogicalCols();
+        int rows = chaseProfile.getLogicalRows();
+        int width = cols * 2 + 1;
+        int height = rows * 2 + 1;
+        MazePoint goal = new MazePoint(width / 2, height / 2);
+        for (int i = 0; i < MAX_RETRY; i++) {
+            int[][] maze = createMazeBuffer(width, height);
+            boolean[][] visited = new boolean[rows][cols];
+            int[] usedWideCorridorBudget = new int[] {0};
+            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, chaseProfile, 4, usedWideCorridorBudget);
+            if (!allLogicalCellsVisited(visited)) {
+                continue;
+            }
+            applyBoundaryLockdown(maze);
+            openGoalArea(maze, goal, true);
+            MazePoint startB = pickChaseRunnerSpawn(maze, goal);
+            if (startB == null) {
+                continue;
+            }
+            MazePoint startA = pickChaserSpawn(maze, startB);
+            if (startA == null) {
+                continue;
+            }
+            if (bfsShortestDistance(maze, startB, goal) <= 0) {
+                continue;
+            }
+            return new GameState(maze, goal, startA, startB);
+        }
+        return buildFallbackChaseGameState(width, height, goal);
+    }
+
+    private GameState buildFallbackChaseGameState(int width, int height, MazePoint goal) {
+        int[][] maze = createMazeBuffer(width, height);
+        for (int y = 1; y < height - 1; y++) {
+            for (int x = 1; x < width - 1; x++) {
+                if (x % 2 == 1 || y % 2 == 1) {
+                    maze[y][x] = MazeCellState.ROAD;
+                }
+            }
+        }
+        applyBoundaryLockdown(maze);
+        openGoalArea(maze, goal, true);
+        MazePoint startB = new MazePoint(width - 2, 1);
+        if ((maze[startB.getY()][startB.getX()] & MazeCellState.WALL) == MazeCellState.WALL) {
+            startB = new MazePoint(width - 2, height - 2);
+        }
+        MazePoint startA = pickChaserSpawn(maze, startB);
+        if (startA == null) {
+            startA = new MazePoint(1, height - 2);
+        }
+        return new GameState(maze, goal, startA, startB);
     }
 
 }
