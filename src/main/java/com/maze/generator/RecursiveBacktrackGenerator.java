@@ -1,101 +1,44 @@
-package com.maze.game;
+package com.maze.generator;
 
-import org.springframework.stereotype.Service;
+import com.maze.domain.Direction;
+import com.maze.domain.GameState;
+import com.maze.domain.MazeCellState;
+import com.maze.domain.MazeLevelProfile;
+import com.maze.domain.MazePoint;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 
-@Service
-public class MazeService {
-    public static final String MODE_TWIN_RACE = "TWIN_RACE";
-    public static final String MODE_CHASE = "CHASE";
-    private static final int CHASE_FIXED_LOGICAL_SIZE = 19;
-    private static final int CHASE_MIN_INITIAL_DISTANCE = 8;
-    private static final int CHASE_MAX_INITIAL_DISTANCE = 10;
-    private static final int DEFAULT_COLS = 21;
-    private static final int DEFAULT_ROWS = 21;
-    private static final int MIN_SIZE = 11;
-    private static final int MAX_SIZE = 29;
-    public static final int MIN_LEVEL = 1;
-    public static final int MAX_LEVEL = 5;
-    public static final int DEFAULT_LEVEL = 4;
-    private static final int MAX_RETRY = 300;
-    /**
-     * Canonical difficulty tiers: grid size and carving biases (branching / path winding).
-     * Levels 1..5 use logical sizes 16..20 with conservative tuning to keep generation stable
-     * under wide-corridor budget constraints.
-     */
-    private static final Map<Integer, MazeLevelProfile> LEVEL_PROFILES_BY_NUMBER;
+/**
+ * 基于递归回溯算法的迷宫生成器
+ */
+public class RecursiveBacktrackGenerator implements MazeGenerator {
 
-    static {
-        Map<Integer, MazeLevelProfile> table = new HashMap<Integer, MazeLevelProfile>();
-        table.put(1, new MazeLevelProfile(13, 13, 25, 7, 12, 0.08d, 95));
-        table.put(2, new MazeLevelProfile(15, 15, 35, 8, 18, 0.12d, 95));
-        table.put(3, new MazeLevelProfile(17, 17, 45, 9, 24, 0.16d, 95));
-        table.put(4, new MazeLevelProfile(19, 19, 52, 10, 30, 0.20d, 95));
-        table.put(5, new MazeLevelProfile(21, 21, 58, 10, 36, 0.24d, 95));
-        LEVEL_PROFILES_BY_NUMBER = Collections.unmodifiableMap(table);
-    }
+    private static final int MAX_RETRY = 300;
 
     private final Random random = new SecureRandom();
 
-    public int clampLevel(Integer level) {
-        if (level == null) {
-            return DEFAULT_LEVEL;
-        }
-        int value = level;
-        if (value < MIN_LEVEL) {
-            return MIN_LEVEL;
-        }
-        if (value > MAX_LEVEL) {
-            return MAX_LEVEL;
-        }
-        return value;
-    }
-
-    public GameState generate(Integer requestedCols, Integer requestedRows) {
-        return generate(requestedCols, requestedRows, null, MODE_TWIN_RACE);
-    }
-
-    public GameState generate(Integer requestedCols, Integer requestedRows, Integer level) {
-        return generate(requestedCols, requestedRows, level, MODE_TWIN_RACE);
-    }
-
-    public GameState generate(Integer requestedCols, Integer requestedRows, Integer level, String gameMode) {
-        String resolvedMode = normalizeGameMode(gameMode);
-        if (MODE_CHASE.equals(resolvedMode)) {
-            return generateChaseGameState();
-        }
-        int resolvedLevel;
-        MazeLevelProfile profile;
-        if (level != null) {
-            resolvedLevel = clampLevel(level);
-            profile = LEVEL_PROFILES_BY_NUMBER.get(resolvedLevel);
-        } else {
-            resolvedLevel = DEFAULT_LEVEL;
-            int cols = normalizeSize(requestedCols, DEFAULT_COLS);
-            int rows = normalizeSize(requestedRows, DEFAULT_ROWS);
-            profile = LEVEL_PROFILES_BY_NUMBER.get(DEFAULT_LEVEL).withLogicalGrid(cols, rows);
-        }
-        int wideCorridorBudget = getWideCorridorBudget(resolvedLevel);
+    @Override
+    public GameState generateRaceMaze(MazeLevelProfile profile, int wideCorridorBudget) {
         int cols = profile.getLogicalCols();
         int rows = profile.getLogicalRows();
         int width = cols * 2 + 1;
         int height = rows * 2 + 1;
         int middleY = height / 2;
+
         for (int i = 0; i < MAX_RETRY; i++) {
             int[][] maze = createMazeBuffer(width, height);
             boolean[][] visited = new boolean[rows][cols];
-            int[] usedWideCorridorBudget = new int[] {0};
+            int[] usedWideCorridorBudget = new int[]{0};
+
             carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, profile,
                     wideCorridorBudget, usedWideCorridorBudget);
+
             if (!allLogicalCellsVisited(visited)) {
                 continue;
             }
@@ -105,6 +48,7 @@ public class MazeService {
             applyBoundaryLockdown(maze);
             openEntriesAtMiddle(maze, middleY);
             openGoalArea(maze, goal, false);
+
             if (wouldCreateSolid2x2Block(maze)) {
                 continue;
             }
@@ -116,6 +60,7 @@ public class MazeService {
             MazePoint startB = new MazePoint(width - 1, middleY);
             int shortestA = bfsShortestDistance(maze, startA, goal);
             int shortestB = bfsShortestDistance(maze, startB, goal);
+
             if (!isBalancedShortestPath(shortestA, shortestB)) {
                 continue;
             }
@@ -124,67 +69,45 @@ public class MazeService {
         throw new IllegalStateException("Unable to generate fair maze.");
     }
 
-    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction) {
-        return tryMove(state, playerId, direction, MODE_TWIN_RACE, null);
-    }
+    @Override
+    public GameState generateChaseMaze(MazeLevelProfile profile) {
+        int cols = profile.getLogicalCols();
+        int rows = profile.getLogicalRows();
+        int width = cols * 2 + 1;
+        int height = rows * 2 + 1;
+        MazePoint goal = new MazePoint(width / 2, height / 2);
 
-    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction, String gameMode) {
-        return tryMove(state, playerId, direction, gameMode, null);
-    }
+        for (int i = 0; i < MAX_RETRY; i++) {
+            int[][] maze = createMazeBuffer(width, height);
+            boolean[][] visited = new boolean[rows][cols];
+            int[] usedWideCorridorBudget = new int[]{0};
 
-    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction, String gameMode, PlayerId chaseChaserId) {
-        String resolvedMode = normalizeGameMode(gameMode);
-        if (state.isGameOver()) {
-            return new MoveResult(false, true, state.getWinner());
-        }
-        Player current = state.getPlayer(playerId);
-        int nextX = current.getX() + direction.getDx();
-        int nextY = current.getY() + direction.getDy();
-        if (!isInside(nextX, nextY, state.getMaze())) {
-            return new MoveResult(false, state.isGameOver(), state.getWinner());
-        }
-        if ((state.getMaze()[nextY][nextX] & MazeCellState.WALL) == MazeCellState.WALL) {
-            return new MoveResult(false, state.isGameOver(), state.getWinner());
-        }
-        state.movePlayer(playerId, nextX, nextY);
-        if (MODE_CHASE.equals(resolvedMode)) {
-            PlayerId chaserId = chaseChaserId == null ? PlayerId.A : chaseChaserId;
-            PlayerId runnerId = chaserId == PlayerId.A ? PlayerId.B : PlayerId.A;
-            Player playerA = state.getPlayer(PlayerId.A);
-            Player playerB = state.getPlayer(PlayerId.B);
-            if (playerA.getX() == playerB.getX() && playerA.getY() == playerB.getY()) {
-                state.setWinner(chaserId);
-            } else if (playerId == runnerId && nextX == state.getGoal().getX() && nextY == state.getGoal().getY()) {
-                state.setWinner(runnerId);
+            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, profile, 4, usedWideCorridorBudget);
+
+            if (!allLogicalCellsVisited(visited)) {
+                continue;
             }
-        } else if (nextX == state.getGoal().getX() && nextY == state.getGoal().getY()) {
-            state.setWinner(playerId);
-        }
-        return new MoveResult(true, state.isGameOver(), state.getWinner());
-    }
 
-    public static class MoveResult {
-        private final boolean moved;
-        private final boolean gameOver;
-        private final PlayerId winner;
+            applyBoundaryLockdown(maze);
+            openGoalArea(maze, goal, true);
 
-        public MoveResult(boolean moved, boolean gameOver, PlayerId winner) {
-            this.moved = moved;
-            this.gameOver = gameOver;
-            this.winner = winner;
-        }
+            MazePoint startB = pickChaseRunnerSpawn(maze, goal);
+            if (startB == null) {
+                continue;
+            }
 
-        public boolean isMoved() {
-            return moved;
-        }
+            MazePoint startA = pickChaserSpawn(maze, startB);
+            if (startA == null) {
+                continue;
+            }
 
-        public boolean isGameOver() {
-            return gameOver;
-        }
+            if (bfsShortestDistance(maze, startB, goal) <= 0) {
+                continue;
+            }
 
-        public PlayerId getWinner() {
-            return winner;
+            return new GameState(maze, goal, startA, startB);
         }
+        return buildFallbackChaseGameState(width, height, goal);
     }
 
     private int[][] createMazeBuffer(int width, int height) {
@@ -197,24 +120,9 @@ public class MazeService {
         return maze;
     }
 
-    private int normalizeSize(Integer value, int defaultValue) {
-        if (value == null) {
-            return defaultValue;
-        }
-        int normalized = Math.max(MIN_SIZE, Math.min(MAX_SIZE, value));
-        if (normalized % 2 == 0) {
-            normalized += 1;
-        }
-        return normalized;
-    }
-
-    private boolean isInside(int x, int y, int[][] maze) {
-        return y >= 0 && y < maze.length && x >= 0 && x < maze[0].length;
-    }
-
     private void carveByRecursiveBacktracking(int cellX, int cellY, boolean[][] visited, int[][] maze,
-                                              Direction previousDirection, MazeLevelProfile profile,
-                                              int wideCorridorBudget, int[] usedWideCorridorBudget) {
+                                               Direction previousDirection, MazeLevelProfile profile,
+                                               int wideCorridorBudget, int[] usedWideCorridorBudget) {
         visited[cellY][cellX] = true;
         int mazeX = cellX * 2 + 1;
         int mazeY = cellY * 2 + 1;
@@ -242,12 +150,8 @@ public class MazeService {
         }
     }
 
-    /**
-     * Before carving a connector, simulate opening the wall cell and the next cell center.
-     * Hard reject 2x2 blocks. 2x3 / 3x2 blocks consume a per-level budget.
-     */
     private boolean canOpenConnector(int[][] maze, int wallX, int wallY, int nextMazeX, int nextMazeY,
-                                     int wideCorridorBudget, int[] usedWideCorridorBudget) {
+                                      int wideCorridorBudget, int[] usedWideCorridorBudget) {
         if (!isInside(wallX, wallY, maze) || !isInside(nextMazeX, nextMazeY, maze)) {
             return false;
         }
@@ -327,6 +231,10 @@ public class MazeService {
         return y >= 0 && y < visited.length && x >= 0 && x < visited[0].length;
     }
 
+    private boolean isInside(int x, int y, int[][] maze) {
+        return y >= 0 && y < maze.length && x >= 0 && x < maze[0].length;
+    }
+
     private List<Direction> buildDirections(Direction previousDirection, int straightBonus, MazeLevelProfile profile) {
         List<Direction> directions = new ArrayList<Direction>();
         directions.add(Direction.UP);
@@ -347,7 +255,7 @@ public class MazeService {
     }
 
     private int scoreDirection(Direction candidate, Direction previousDirection, int straightBonus,
-                               MazeLevelProfile profile) {
+                                MazeLevelProfile profile) {
         int score = random.nextInt(profile.getScoreJitterExclusiveMax());
         if (candidate == previousDirection) {
             score -= profile.getStraightContinuationDeduction() + straightBonus * profile.getStraightBonusMultiplier();
@@ -402,21 +310,6 @@ public class MazeService {
         }
     }
 
-    private int getWideCorridorBudget(int level) {
-        if (level <= 2) {
-            return 1;
-        }
-        if (level <= 4) {
-            return 2;
-        }
-        return 3;
-    }
-
-    /**
-     * After generation, two BFS runs yield shortest path lengths La and Lb from each entry to
-     * the goal. Reject when the imbalance exceeds 10% of their average, i.e. when
-     * absolute difference is greater than ceil of 5% of (La + Lb).
-     */
     private boolean isBalancedShortestPath(int shortestA, int shortestB) {
         if (shortestA <= 0 || shortestB <= 0) {
             return false;
@@ -459,16 +352,8 @@ public class MazeService {
         return -1;
     }
 
-    private String normalizeGameMode(String gameMode) {
-        if (gameMode == null) {
-            return MODE_TWIN_RACE;
-        }
-        String normalized = gameMode.trim().toUpperCase();
-        if (MODE_CHASE.equals(normalized)) {
-            return MODE_CHASE;
-        }
-        return MODE_TWIN_RACE;
-    }
+    private static final int CHASE_MIN_INITIAL_DISTANCE = 8;
+    private static final int CHASE_MAX_INITIAL_DISTANCE = 10;
 
     private MazePoint pickChaseRunnerSpawn(int[][] maze, MazePoint goal) {
         List<MazePoint> allTraversable = new ArrayList<MazePoint>();
@@ -545,40 +430,6 @@ public class MazeService {
         return null;
     }
 
-    private GameState generateChaseGameState() {
-        MazeLevelProfile chaseProfile = LEVEL_PROFILES_BY_NUMBER.get(DEFAULT_LEVEL)
-                .withLogicalGrid(CHASE_FIXED_LOGICAL_SIZE, CHASE_FIXED_LOGICAL_SIZE);
-        int cols = chaseProfile.getLogicalCols();
-        int rows = chaseProfile.getLogicalRows();
-        int width = cols * 2 + 1;
-        int height = rows * 2 + 1;
-        MazePoint goal = new MazePoint(width / 2, height / 2);
-        for (int i = 0; i < MAX_RETRY; i++) {
-            int[][] maze = createMazeBuffer(width, height);
-            boolean[][] visited = new boolean[rows][cols];
-            int[] usedWideCorridorBudget = new int[] {0};
-            carveByRecursiveBacktracking(cols / 2, rows / 2, visited, maze, null, chaseProfile, 4, usedWideCorridorBudget);
-            if (!allLogicalCellsVisited(visited)) {
-                continue;
-            }
-            applyBoundaryLockdown(maze);
-            openGoalArea(maze, goal, true);
-            MazePoint startB = pickChaseRunnerSpawn(maze, goal);
-            if (startB == null) {
-                continue;
-            }
-            MazePoint startA = pickChaserSpawn(maze, startB);
-            if (startA == null) {
-                continue;
-            }
-            if (bfsShortestDistance(maze, startB, goal) <= 0) {
-                continue;
-            }
-            return new GameState(maze, goal, startA, startB);
-        }
-        return buildFallbackChaseGameState(width, height, goal);
-    }
-
     private GameState buildFallbackChaseGameState(int width, int height, MazePoint goal) {
         int[][] maze = createMazeBuffer(width, height);
         for (int y = 1; y < height - 1; y++) {
@@ -600,5 +451,4 @@ public class MazeService {
         }
         return new GameState(maze, goal, startA, startB);
     }
-
 }

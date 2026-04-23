@@ -1,4 +1,4 @@
-package com.maze.game;
+package com.maze.domain;
 
 public class Player {
     private int x;

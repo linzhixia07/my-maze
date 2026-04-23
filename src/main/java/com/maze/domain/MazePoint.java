@@ -1,4 +1,4 @@
-package com.maze.game;
+package com.maze.domain;
 
 import java.util.Objects;
 

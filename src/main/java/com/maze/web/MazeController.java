@@ -1,10 +1,10 @@
 package com.maze.web;
 
-import com.maze.game.Direction;
-import com.maze.game.GameState;
-import com.maze.game.MazePoint;
-import com.maze.game.MazeService;
-import com.maze.game.PlayerId;
+import com.maze.domain.Direction;
+import com.maze.domain.GameState;
+import com.maze.domain.MazePoint;
+import com.maze.domain.PlayerId;
+import com.maze.service.MazeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

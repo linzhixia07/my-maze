@@ -1,4 +1,4 @@
-package com.maze.game;
+package com.maze.domain;
 
 public final class MazeCellState {
     private MazeCellState() {
