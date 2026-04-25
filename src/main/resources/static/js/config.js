@@ -4,6 +4,7 @@
 const GameConfig = {
     MODE_TWIN_RACE: "TWIN_RACE",
     MODE_CHASE: "CHASE",
+    MODE_MEMORY: "MEMORY_MATCH",
     MAX_LEVEL: 5,
     CHASE_FIXED_LEVEL: 1,
 

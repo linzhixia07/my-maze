@@ -17,6 +17,16 @@ const Game = {
     keyPressed: {},
     moveLoopId: null,
     activeTheme: buildActiveTheme(1),
+    memoryDeck: [],
+    memoryFlippedIndices: [],
+    memoryMatchedCount: 0,
+    memoryCurrentPlayer: "A",
+    memoryInputLocked: false,
+    memoryTieBreakTick: 0,
+    memoryReachTime: {A: {}, B: {}},
+    vocabulary: [],
+    memoryRows: 4,
+    memoryCols: 6,
 
     // DOM 元素引用
     elements: {},
@@ -50,9 +60,17 @@ const Game = {
             modeSelectorOverlay: document.getElementById("modeSelectorOverlay"),
             modeTwinRaceBtn: document.getElementById("modeTwinRaceBtn"),
             modeChaseBtn: document.getElementById("modeChaseBtn"),
+            modeMemoryBtn: document.getElementById("modeMemoryBtn"),
             chaseControls: document.getElementById("chaseControls"),
             toggleChaserBtn: document.getElementById("toggleChaserBtn"),
-            chaseStatus: document.getElementById("chaseStatus")
+            chaseStatus: document.getElementById("chaseStatus"),
+            memoryBoard: document.getElementById("memoryBoard"),
+            memorySizeOverlay: document.getElementById("memorySizeOverlay"),
+            memoryRowsInput: document.getElementById("memoryRowsInput"),
+            memoryColsInput: document.getElementById("memoryColsInput"),
+            memorySizeCancelBtn: document.getElementById("memorySizeCancelBtn"),
+            memorySizeConfirmBtn: document.getElementById("memorySizeConfirmBtn"),
+            memorySizeError: document.getElementById("memorySizeError")
         };
     },
 
@@ -64,12 +82,15 @@ const Game = {
         this.elements.nextLevelBtn.addEventListener("click", () => this.onNextLevelClick());
         this.elements.modeTwinRaceBtn.addEventListener("click", () => this.selectGameMode(GameConfig.MODE_TWIN_RACE));
         this.elements.modeChaseBtn.addEventListener("click", () => this.selectGameMode(GameConfig.MODE_CHASE));
+        this.elements.modeMemoryBtn.addEventListener("click", () => this.selectGameMode(GameConfig.MODE_MEMORY));
         this.elements.toggleChaserBtn.addEventListener("click", () => this.onToggleChaserClick());
+        this.elements.memorySizeCancelBtn.addEventListener("click", () => this.hideMemorySizeDialog());
+        this.elements.memorySizeConfirmBtn.addEventListener("click", () => this.onConfirmMemorySize());
 
         window.addEventListener("keydown", (e) => this.onKeyDown(e));
         window.addEventListener("keyup", (e) => this.onKeyUp(e));
         window.addEventListener("resize", () => {
-            if (this.maze && this.maze.length > 0) {
+            if (this.currentGameMode !== GameConfig.MODE_MEMORY && this.maze && this.maze.length > 0) {
                 this.render();
             }
         });
@@ -80,6 +101,10 @@ const Game = {
      */
     onResetLevelClick() {
         if (!this.currentGameMode) return;
+        if (this.currentGameMode === GameConfig.MODE_MEMORY) {
+            this.showMemorySizeDialog();
+            return;
+        }
 
         if (this.currentGameMode === GameConfig.MODE_CHASE) {
             this.chaseChaserPlayerId = Math.random() < 0.5 ? "A" : "B";
@@ -95,7 +120,7 @@ const Game = {
      */
     onNextLevelClick() {
         if (!this.currentGameMode) return;
-        if (this.currentGameMode === GameConfig.MODE_CHASE) return;
+        if (this.currentGameMode === GameConfig.MODE_CHASE || this.currentGameMode === GameConfig.MODE_MEMORY) return;
         if (this.currentLevel >= GameConfig.MAX_LEVEL) return;
 
         this.currentLevel += 1;
@@ -112,12 +137,24 @@ const Game = {
             this.elements.nextLevelBtn.classList.add("hidden");
             this.elements.resetLevelBtn.textContent = "重置游戏";
             this.elements.chaseControls.classList.remove("hidden");
+            this.elements.canvas.classList.remove("hidden");
+            this.elements.memoryBoard.classList.add("hidden");
             this.updateChaseStatusText();
+            return;
+        }
+        if (this.currentGameMode === GameConfig.MODE_MEMORY) {
+            this.elements.nextLevelBtn.classList.add("hidden");
+            this.elements.resetLevelBtn.textContent = "重置游戏";
+            this.elements.chaseControls.classList.add("hidden");
+            this.elements.canvas.classList.add("hidden");
+            this.elements.memoryBoard.classList.remove("hidden");
             return;
         }
         this.elements.nextLevelBtn.classList.remove("hidden");
         this.elements.resetLevelBtn.textContent = "重置关卡";
         this.elements.chaseControls.classList.add("hidden");
+        this.elements.canvas.classList.remove("hidden");
+        this.elements.memoryBoard.classList.add("hidden");
         this.elements.nextLevelBtn.disabled = this.currentLevel >= GameConfig.MAX_LEVEL;
     },
 
@@ -139,6 +176,8 @@ const Game = {
 
         if (this.currentGameMode === GameConfig.MODE_CHASE) {
             this.elements.levelBadge.textContent = "抓人模式 | 固定地图 19";
+        } else if (this.currentGameMode === GameConfig.MODE_MEMORY) {
+            this.elements.levelBadge.textContent = this.buildMemoryBadgeText();
         } else {
             this.elements.levelBadge.textContent = "Level: " + lv + "/" + GameConfig.MAX_LEVEL;
         }
@@ -148,7 +187,7 @@ const Game = {
      * 键盘按下
      */
     onKeyDown(event) {
-        if (this.inputLocked) return;
+        if (this.inputLocked || this.currentGameMode === GameConfig.MODE_MEMORY) return;
         if (GameConfig.KEY_MAPPING[event.key]) {
             event.preventDefault();
             this.keyPressed[event.key] = true;
@@ -172,7 +211,7 @@ const Game = {
             clearInterval(this.moveLoopId);
         }
         this.moveLoopId = setInterval(() => {
-            if (this.inputLocked) return;
+            if (this.inputLocked || this.currentGameMode === GameConfig.MODE_MEMORY) return;
 
             const actionA = this.currentDirectionForPlayer("A");
             const actionB = this.currentDirectionForPlayer("B");
@@ -208,7 +247,7 @@ const Game = {
      * 加载当前关卡迷宫
      */
     loadMazeForCurrentLevel() {
-        if (!this.currentGameMode) return;
+        if (!this.currentGameMode || this.currentGameMode === GameConfig.MODE_MEMORY) return;
 
         this.inputLocked = false;
         this.winnerMessage = "";
@@ -308,8 +347,9 @@ const Game = {
      * 更新分数显示
      */
     updateScoreDisplay() {
-        this.elements.playerAScore.textContent = "胜场：" + this.scoreBoard.A;
-        this.elements.playerBScore.textContent = "胜场：" + this.scoreBoard.B;
+        const label = this.currentGameMode === GameConfig.MODE_MEMORY ? "得分：" : "胜场：";
+        this.elements.playerAScore.textContent = label + this.scoreBoard.A;
+        this.elements.playerBScore.textContent = label + this.scoreBoard.B;
     },
 
     /**
@@ -325,15 +365,29 @@ const Game = {
      */
     selectGameMode(mode) {
         this.currentGameMode = mode;
+        this.winnerMessage = "";
         if (mode === GameConfig.MODE_CHASE) {
             this.chaseChaserPlayerId = Math.random() < 0.5 ? "A" : "B";
         }
         this.elements.modeSelectorOverlay.classList.add("hidden");
         this.inputLocked = false;
         this.currentLevel = mode === GameConfig.MODE_CHASE ? GameConfig.CHASE_FIXED_LEVEL : 1;
+        this.scoreBoard = {A: 0, B: 0};
+        this.updateScoreDisplay();
         this.applyLevelTheme(this.currentLevel);
         this.updateNextLevelButton();
-        this.loadMazeForCurrentLevel();
+
+        switch (mode) {
+            case GameConfig.MODE_TWIN_RACE:
+            case GameConfig.MODE_CHASE:
+                this.loadMazeForCurrentLevel();
+                break;
+            case GameConfig.MODE_MEMORY:
+                this.initMemoryGame();
+                break;
+            default:
+                break;
+        }
     },
 
     /**
@@ -363,6 +417,267 @@ const Game = {
             this.elements.chaseStatus.textContent = "当前抓人方：红色方";
             this.elements.toggleChaserBtn.textContent = "切换为蓝色方抓人";
         }
+    },
+
+    initMemoryGame() {
+        this.resetMemoryRuntimeState();
+        this.loadVocabulary()
+            .then(() => this.resetMemoryGame())
+            .catch(() => {
+                this.vocabulary = this.getFallbackVocabulary();
+                this.resetMemoryGame();
+            });
+    },
+
+    resetMemoryRuntimeState() {
+        this.memoryDeck = [];
+        this.memoryFlippedIndices = [];
+        this.memoryMatchedCount = 0;
+        this.memoryCurrentPlayer = "A";
+        this.memoryInputLocked = false;
+        this.memoryTieBreakTick = 0;
+        this.memoryReachTime = {A: {}, B: {}};
+        this.winnerMessage = "";
+        this.scoreBoard = {A: 0, B: 0};
+        this.updateScoreDisplay();
+    },
+
+    resetMemoryGame() {
+        if (this.currentGameMode !== GameConfig.MODE_MEMORY) return;
+        this.resetMemoryRuntimeState();
+        this.applyMemoryGridSize();
+        this.memoryDeck = this.buildMemoryDeck();
+        this.renderMemoryBoard();
+        this.applyLevelTheme(1);
+        this.elements.canvas.classList.add("hidden");
+    },
+
+    async loadVocabulary() {
+        const response = await fetch("/dict.txt", {cache: "no-store"});
+        if (!response.ok) throw new Error("dict fetch failed");
+        const content = await response.text();
+        const words = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+        this.vocabulary = words.length >= 12 ? words : this.getFallbackVocabulary();
+    },
+
+    getFallbackVocabulary() {
+        return [
+            "Apple", "Cat", "Dog", "Sun", "Book", "Fish", "Tree", "Milk", "Bird", "Cake",
+            "Ball", "Star", "Moon", "Hand", "Duck", "Bear", "Lion", "Frog", "Ship", "Leaf",
+            "Rain", "Cloud", "Smile", "Bread", "Flower"
+        ];
+    },
+
+    buildMemoryDeck() {
+        const source = this.vocabulary.length >= 12 ? this.vocabulary : this.getFallbackVocabulary();
+        const pairCount = (this.memoryRows * this.memoryCols) / 2;
+        const picked = this.shuffleArray(source.slice()).slice(0, pairCount);
+        const deck = [];
+        for (let i = 0; i < picked.length; i++) {
+            const word = picked[i];
+            deck.push({id: word + "-1-" + i, word: word, isFlipped: false, isMatched: false});
+            deck.push({id: word + "-2-" + i, word: word, isFlipped: false, isMatched: false});
+        }
+        return this.shuffleArray(deck);
+    },
+
+    shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = tmp;
+        }
+        return arr;
+    },
+
+    renderMemoryBoard() {
+        const board = this.elements.memoryBoard;
+        board.innerHTML = "";
+        board.style.pointerEvents = this.winnerMessage ? "none" : "auto";
+
+        for (let i = 0; i < this.memoryDeck.length; i++) {
+            const card = this.memoryDeck[i];
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "memory-card";
+            if (card.isFlipped || card.isMatched) button.classList.add("is-flipped");
+            if (card.isMatched) button.classList.add("is-matched");
+            button.disabled = card.isMatched;
+            const cardColor = card.isMatched ? this.getWordColor(card.word) : this.getUnmatchedFlipColor();
+            const cardBorder = card.isMatched ? this.getWordBorderColor(card.word) : this.getUnmatchedFlipBorderColor();
+            button.innerHTML = "<div class=\"memory-card-inner\"><div class=\"memory-card-face memory-card-back\">?</div><div class=\"memory-card-face memory-card-front\" style=\"background:" + cardColor + ";border-color:" + cardBorder + ";\">" + card.word + "</div></div>";
+            button.addEventListener("click", () => this.onMemoryCardClick(i));
+            board.appendChild(button);
+        }
+
+        if (this.winnerMessage) {
+            const overlay = document.createElement("div");
+            overlay.className = "memory-winner-overlay";
+            overlay.innerHTML = "<div class=\"memory-winner-message\">" + this.winnerMessage + "</div>";
+            board.appendChild(overlay);
+        }
+
+        this.updateScoreDisplay();
+        this.applyLevelTheme(1);
+    },
+
+    onMemoryCardClick(index) {
+        if (this.currentGameMode !== GameConfig.MODE_MEMORY || this.memoryInputLocked) return;
+        const card = this.memoryDeck[index];
+        if (!card || card.isMatched || card.isFlipped || this.memoryFlippedIndices.length >= 2) return;
+
+        card.isFlipped = true;
+        this.memoryFlippedIndices.push(index);
+        this.renderMemoryBoard();
+
+        if (this.memoryFlippedIndices.length === 2) {
+            this.resolveMemoryTurn();
+        }
+    },
+
+    resolveMemoryTurn() {
+        if (this.memoryFlippedIndices.length !== 2) return;
+        this.memoryInputLocked = true;
+        const firstIndex = this.memoryFlippedIndices[0];
+        const secondIndex = this.memoryFlippedIndices[1];
+        const first = this.memoryDeck[firstIndex];
+        const second = this.memoryDeck[secondIndex];
+        if (!first || !second) {
+            this.memoryFlippedIndices = [];
+            this.memoryInputLocked = false;
+            return;
+        }
+
+        if (first.word === second.word) {
+            first.isMatched = true;
+            second.isMatched = true;
+            this.memoryMatchedCount += 2;
+
+            this.scoreBoard[this.memoryCurrentPlayer] += 1;
+            this.memoryTieBreakTick += 1;
+            const score = this.scoreBoard[this.memoryCurrentPlayer];
+            if (!this.memoryReachTime[this.memoryCurrentPlayer][score]) {
+                this.memoryReachTime[this.memoryCurrentPlayer][score] = this.memoryTieBreakTick;
+            }
+
+            this.memoryFlippedIndices = [];
+            this.memoryInputLocked = false;
+            this.switchMemoryPlayer();
+            this.finishMemoryIfNeeded();
+            this.renderMemoryBoard();
+            return;
+        }
+
+        setTimeout(() => {
+            if (this.currentGameMode !== GameConfig.MODE_MEMORY) return;
+            first.isFlipped = false;
+            second.isFlipped = false;
+            this.memoryFlippedIndices = [];
+            this.memoryInputLocked = false;
+            this.switchMemoryPlayer();
+            this.renderMemoryBoard();
+        }, 1500);
+    },
+
+    switchMemoryPlayer() {
+        this.memoryCurrentPlayer = this.memoryCurrentPlayer === "A" ? "B" : "A";
+        this.updateScoreDisplay();
+    },
+
+    finishMemoryIfNeeded() {
+        if (this.memoryMatchedCount !== this.memoryDeck.length) return;
+
+        const scoreA = this.scoreBoard.A;
+        const scoreB = this.scoreBoard.B;
+        let winnerId = "A";
+        if (scoreB > scoreA) {
+            winnerId = "B";
+        } else if (scoreA === scoreB) {
+            const reachA = this.memoryReachTime.A[scoreA] || Number.MAX_SAFE_INTEGER;
+            const reachB = this.memoryReachTime.B[scoreB] || Number.MAX_SAFE_INTEGER;
+            winnerId = reachA <= reachB ? "A" : "B";
+        }
+        this.winnerMessage = this.getWinnerMessage(winnerId);
+        this.memoryInputLocked = true;
+    },
+
+    buildMemoryBadgeText() {
+        return "单词配对 | " + this.getPlayerDisplayName("A") + " " + this.scoreBoard.A + " vs " + this.scoreBoard.B + " " + this.getPlayerDisplayName("B") + " | 当前：" + this.getPlayerDisplayName(this.memoryCurrentPlayer);
+    },
+
+    getWordColor(word) {
+        let hash = 0;
+        for (let i = 0; i < word.length; i++) {
+            hash = (hash * 31 + word.charCodeAt(i)) >>> 0;
+        }
+        const hue = hash % 360;
+        return "hsl(" + hue + ", 70%, 90%)";
+    },
+
+    getWordBorderColor(word) {
+        let hash = 0;
+        for (let i = 0; i < word.length; i++) {
+            hash = (hash * 37 + word.charCodeAt(i)) >>> 0;
+        }
+        const hue = hash % 360;
+        return "hsl(" + hue + ", 45%, 76%)";
+    },
+
+    getUnmatchedFlipColor() {
+        return "#e9f4ff";
+    },
+
+    getUnmatchedFlipBorderColor() {
+        return "#b8d6f2";
+    },
+
+    applyMemoryGridSize() {
+        this.elements.memoryBoard.style.gridTemplateRows = "repeat(" + this.memoryRows + ", minmax(102px, 1fr))";
+        this.elements.memoryBoard.style.gridTemplateColumns = "repeat(" + this.memoryCols + ", minmax(96px, 1fr))";
+    },
+
+    showMemorySizeDialog() {
+        this.elements.memoryRowsInput.value = String(this.memoryRows);
+        this.elements.memoryColsInput.value = String(this.memoryCols);
+        this.elements.memorySizeError.textContent = "";
+        this.elements.memorySizeError.classList.add("hidden");
+        this.elements.memorySizeOverlay.classList.remove("hidden");
+    },
+
+    hideMemorySizeDialog() {
+        this.elements.memorySizeOverlay.classList.add("hidden");
+    },
+
+    onConfirmMemorySize() {
+        const rows = Number(this.elements.memoryRowsInput.value);
+        const cols = Number(this.elements.memoryColsInput.value);
+        if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 2 || cols < 2) {
+            this.showMemorySizeError("请输入 2 到 10 之间的整数行列。");
+            return;
+        }
+
+        const total = rows * cols;
+        if (total % 2 !== 0) {
+            this.showMemorySizeError("总格子数必须是偶数，才能两两配对。");
+            return;
+        }
+
+        const maxPairs = (this.vocabulary.length >= 12 ? this.vocabulary.length : this.getFallbackVocabulary().length);
+        if ((total / 2) > maxPairs) {
+            this.showMemorySizeError("当前词库最多支持 " + (maxPairs * 2) + " 张牌。");
+            return;
+        }
+
+        this.memoryRows = rows;
+        this.memoryCols = cols;
+        this.hideMemorySizeDialog();
+        this.resetMemoryGame();
+    },
+
+    showMemorySizeError(message) {
+        this.elements.memorySizeError.textContent = message;
+        this.elements.memorySizeError.classList.remove("hidden");
     }
 };
 

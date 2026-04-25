@@ -10,12 +10,30 @@
 <div id="modeSelectorOverlay" class="mode-selector-overlay">
     <div class="mode-selector-dialog">
         <h2>选择游戏模式</h2>
-        <p>请选择一场冒险：双人竞速冲向奖杯，或开启抓人追逃对决。</p>
+        <p>请选择一场冒险：双人竞速冲向奖杯、开启抓人追逃对决，或进行单词配对记忆挑战。</p>
         <div class="mode-actions">
-            <button type="button" id="modeTwinRaceBtn" class="btn-mode-race">模式 A：双人迷宫 (Twin Race)</button>
-            <button type="button" id="modeChaseBtn" class="btn-mode-chase">模式 B：抓人游戏 (The Chase)</button>
+            <button type="button" id="modeTwinRaceBtn" class="btn-mode-race">1. 双人迷宫 (Twin Race)</button>
+            <button type="button" id="modeChaseBtn" class="btn-mode-chase">2. 抓人游戏 (The Chase)</button>
+            <button type="button" id="modeMemoryBtn" class="btn-mode-memory">3. 单词配对 (Memory Match)</button>
         </div>
         <div class="mode-note">提示：重置关卡会按当前模式重新开局，不会返回此选择界面。</div>
+    </div>
+</div>
+<div id="memorySizeOverlay" class="mode-selector-overlay hidden">
+    <div class="mode-selector-dialog memory-size-dialog">
+        <h2>设置单词配对棋盘</h2>
+        <p>请输入行列数（默认 4 x 6）。总格子数必须为偶数。</p>
+        <div class="memory-size-form">
+            <label for="memoryRowsInput">行数</label>
+            <input id="memoryRowsInput" type="number" min="2" max="10" value="4">
+            <label for="memoryColsInput">列数</label>
+            <input id="memoryColsInput" type="number" min="2" max="10" value="6">
+        </div>
+        <div class="mode-actions">
+            <button type="button" id="memorySizeCancelBtn" class="btn-mode-race">取消</button>
+            <button type="button" id="memorySizeConfirmBtn" class="btn-mode-memory">开始新局</button>
+        </div>
+        <div id="memorySizeError" class="mode-note hidden"></div>
     </div>
 </div>
 <div class="game">
@@ -27,6 +45,7 @@
             <div id="playerAScore" class="player-score">胜场：0</div>
         </div>
         <canvas id="mazeCanvas" width="700" height="700"></canvas>
+        <div id="memoryBoard" class="memory-board hidden" aria-label="单词配对游戏棋盘"></div>
         <div class="player-panel">
             <label for="playerBName">玩家 B 名字</label>
             <input id="playerBName" type="text" value="玩家B" maxlength="16">
