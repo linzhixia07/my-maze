@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
-public class GameService {
+public class MazeService {
     public static final String MODE_TWIN_RACE = "TWIN_RACE";
     public static final String MODE_CHASE = "CHASE";
     private static final int CHASE_FIXED_LOGICAL_SIZE = 19;
@@ -46,7 +46,7 @@ public class GameService {
     private final GameModeStrategy twinRaceStrategy;
     private final GameModeStrategy chaseModeStrategy;
 
-    public GameService() {
+    public MazeService() {
         this.mazeGenerator = new RecursiveBacktrackGenerator();
         this.twinRaceStrategy = new TwinRaceStrategy();
         this.chaseModeStrategy = new ChaseModeStrategy();

@@ -1,8 +1,10 @@
 package com.game.domain;
 
+import com.game.service.MazeService;
+
 /**
  * Data-only description of one maze difficulty tier: logical grid size and carving biases.
- * The canonical level table lives in {@link com.game.service.GameService}.
+ * The canonical level table lives in {@link MazeService}.
  */
 public final class MazeLevelProfile {
     private final int logicalCols;

@@ -18,13 +18,8 @@ const Game = {
     moveLoopId: null,
     activeTheme: buildActiveTheme(1),
     memoryDeck: [],
-    memoryFlippedIndices: [],
-    memoryMatchedCount: 0,
     memoryCurrentPlayer: "A",
     memoryInputLocked: false,
-    memoryTieBreakTick: 0,
-    memoryReachTime: {A: {}, B: {}},
-    vocabulary: [],
     memoryRows: 4,
     memoryCols: 6,
 
@@ -421,22 +416,13 @@ const Game = {
 
     initMemoryGame() {
         this.resetMemoryRuntimeState();
-        this.loadVocabulary()
-            .then(() => this.resetMemoryGame())
-            .catch(() => {
-                this.vocabulary = this.getFallbackVocabulary();
-                this.resetMemoryGame();
-            });
+        this.startMemoryGame();
     },
 
     resetMemoryRuntimeState() {
         this.memoryDeck = [];
-        this.memoryFlippedIndices = [];
-        this.memoryMatchedCount = 0;
         this.memoryCurrentPlayer = "A";
         this.memoryInputLocked = false;
-        this.memoryTieBreakTick = 0;
-        this.memoryReachTime = {A: {}, B: {}};
         this.winnerMessage = "";
         this.scoreBoard = {A: 0, B: 0};
         this.updateScoreDisplay();
@@ -444,49 +430,27 @@ const Game = {
 
     resetMemoryGame() {
         if (this.currentGameMode !== GameConfig.MODE_MEMORY) return;
-        this.resetMemoryRuntimeState();
+        this.startMemoryGame();
+    },
+
+    startMemoryGame() {
+        ApiService.startMemoryGame(this.memoryRows, this.memoryCols)
+            .then((state) => this.applyMemoryState(state))
+            .catch(() => {});
+    },
+
+    applyMemoryState(state) {
+        this.memoryDeck = state.deck || [];
+        this.memoryRows = typeof state.rows === "number" ? state.rows : this.memoryRows;
+        this.memoryCols = typeof state.cols === "number" ? state.cols : this.memoryCols;
+        this.memoryCurrentPlayer = state.currentPlayer || "A";
+        this.scoreBoard = state.scoreBoard || {A: 0, B: 0};
+        this.memoryInputLocked = !!state.inputLocked;
+        this.winnerMessage = state.gameOver && state.winner ? this.getWinnerMessage(state.winner) : "";
         this.applyMemoryGridSize();
-        this.memoryDeck = this.buildMemoryDeck();
         this.renderMemoryBoard();
         this.applyLevelTheme(1);
         this.elements.canvas.classList.add("hidden");
-    },
-
-    async loadVocabulary() {
-        const content = await ApiService.loadMemoryVocabulary();
-        const words = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
-        this.vocabulary = words.length >= 12 ? words : this.getFallbackVocabulary();
-    },
-
-    getFallbackVocabulary() {
-        return [
-            "Apple", "Cat", "Dog", "Sun", "Book", "Fish", "Tree", "Milk", "Bird", "Cake",
-            "Ball", "Star", "Moon", "Hand", "Duck", "Bear", "Lion", "Frog", "Ship", "Leaf",
-            "Rain", "Cloud", "Smile", "Bread", "Flower"
-        ];
-    },
-
-    buildMemoryDeck() {
-        const source = this.vocabulary.length >= 12 ? this.vocabulary : this.getFallbackVocabulary();
-        const pairCount = (this.memoryRows * this.memoryCols) / 2;
-        const picked = this.shuffleArray(source.slice()).slice(0, pairCount);
-        const deck = [];
-        for (let i = 0; i < picked.length; i++) {
-            const word = picked[i];
-            deck.push({id: word + "-1-" + i, word: word, isFlipped: false, isMatched: false});
-            deck.push({id: word + "-2-" + i, word: word, isFlipped: false, isMatched: false});
-        }
-        return this.shuffleArray(deck);
-    },
-
-    shuffleArray(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            const tmp = arr[i];
-            arr[i] = arr[j];
-            arr[j] = tmp;
-        }
-        return arr;
     },
 
     renderMemoryBoard() {
@@ -499,11 +463,11 @@ const Game = {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "memory-card";
-            if (card.isFlipped || card.isMatched) button.classList.add("is-flipped");
-            if (card.isMatched) button.classList.add("is-matched");
-            button.disabled = card.isMatched;
-            const cardColor = card.isMatched ? this.getWordColor(card.word) : this.getUnmatchedFlipColor();
-            const cardBorder = card.isMatched ? this.getWordBorderColor(card.word) : this.getUnmatchedFlipBorderColor();
+            if (card.flipped || card.matched) button.classList.add("is-flipped");
+            if (card.matched) button.classList.add("is-matched");
+            button.disabled = card.matched;
+            const cardColor = card.matched ? this.getWordColor(card.word) : this.getUnmatchedFlipColor();
+            const cardBorder = card.matched ? this.getWordBorderColor(card.word) : this.getUnmatchedFlipBorderColor();
             button.innerHTML = "<div class=\"memory-card-inner\"><div class=\"memory-card-face memory-card-back\">?</div><div class=\"memory-card-face memory-card-front\" style=\"background:" + cardColor + ";border-color:" + cardBorder + ";\">" + card.word + "</div></div>";
             button.addEventListener("click", () => this.onMemoryCardClick(i));
             board.appendChild(button);
@@ -523,81 +487,20 @@ const Game = {
     onMemoryCardClick(index) {
         if (this.currentGameMode !== GameConfig.MODE_MEMORY || this.memoryInputLocked) return;
         const card = this.memoryDeck[index];
-        if (!card || card.isMatched || card.isFlipped || this.memoryFlippedIndices.length >= 2) return;
-
-        card.isFlipped = true;
-        this.memoryFlippedIndices.push(index);
-        this.renderMemoryBoard();
-
-        if (this.memoryFlippedIndices.length === 2) {
-            this.resolveMemoryTurn();
-        }
-    },
-
-    resolveMemoryTurn() {
-        if (this.memoryFlippedIndices.length !== 2) return;
-        this.memoryInputLocked = true;
-        const firstIndex = this.memoryFlippedIndices[0];
-        const secondIndex = this.memoryFlippedIndices[1];
-        const first = this.memoryDeck[firstIndex];
-        const second = this.memoryDeck[secondIndex];
-        if (!first || !second) {
-            this.memoryFlippedIndices = [];
-            this.memoryInputLocked = false;
-            return;
-        }
-
-        if (first.word === second.word) {
-            first.isMatched = true;
-            second.isMatched = true;
-            this.memoryMatchedCount += 2;
-
-            this.scoreBoard[this.memoryCurrentPlayer] += 1;
-            this.memoryTieBreakTick += 1;
-            const score = this.scoreBoard[this.memoryCurrentPlayer];
-            if (!this.memoryReachTime[this.memoryCurrentPlayer][score]) {
-                this.memoryReachTime[this.memoryCurrentPlayer][score] = this.memoryTieBreakTick;
-            }
-
-            this.memoryFlippedIndices = [];
-            this.memoryInputLocked = false;
-            this.switchMemoryPlayer();
-            this.finishMemoryIfNeeded();
-            this.renderMemoryBoard();
-            return;
-        }
-
-        setTimeout(() => {
-            if (this.currentGameMode !== GameConfig.MODE_MEMORY) return;
-            first.isFlipped = false;
-            second.isFlipped = false;
-            this.memoryFlippedIndices = [];
-            this.memoryInputLocked = false;
-            this.switchMemoryPlayer();
-            this.renderMemoryBoard();
-        }, 1500);
-    },
-
-    switchMemoryPlayer() {
-        this.memoryCurrentPlayer = this.memoryCurrentPlayer === "A" ? "B" : "A";
-        this.updateScoreDisplay();
-    },
-
-    finishMemoryIfNeeded() {
-        if (this.memoryMatchedCount !== this.memoryDeck.length) return;
-
-        const scoreA = this.scoreBoard.A;
-        const scoreB = this.scoreBoard.B;
-        let winnerId = "A";
-        if (scoreB > scoreA) {
-            winnerId = "B";
-        } else if (scoreA === scoreB) {
-            const reachA = this.memoryReachTime.A[scoreA] || Number.MAX_SAFE_INTEGER;
-            const reachB = this.memoryReachTime.B[scoreB] || Number.MAX_SAFE_INTEGER;
-            winnerId = reachA <= reachB ? "A" : "B";
-        }
-        this.winnerMessage = this.getWinnerMessage(winnerId);
-        this.memoryInputLocked = true;
+        if (!card || card.matched || card.flipped) return;
+        ApiService.flipMemoryCard(index)
+            .then((state) => {
+                this.applyMemoryState(state);
+                if (state.pendingResolve) {
+                    setTimeout(() => {
+                        if (this.currentGameMode !== GameConfig.MODE_MEMORY) return;
+                        ApiService.resolveMemoryTurn()
+                            .then((resolvedState) => this.applyMemoryState(resolvedState))
+                            .catch(() => {});
+                    }, 2000);
+                }
+            })
+            .catch(() => {});
     },
 
     buildMemoryBadgeText() {
@@ -658,12 +561,6 @@ const Game = {
         const total = rows * cols;
         if (total % 2 !== 0) {
             this.showMemorySizeError("总格子数必须是偶数，才能两两配对。");
-            return;
-        }
-
-        const maxPairs = (this.vocabulary.length >= 12 ? this.vocabulary.length : this.getFallbackVocabulary().length);
-        if ((total / 2) > maxPairs) {
-            this.showMemorySizeError("当前词库最多支持 " + (maxPairs * 2) + " 张牌。");
             return;
         }
 
