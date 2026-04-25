@@ -1,4 +1,4 @@
-package com.maze.domain;
+package com.game.domain;
 
 public enum PlayerId {
     A,

@@ -1,10 +1,10 @@
-package com.maze.generator;
+package com.game.generator;
 
-import com.maze.domain.Direction;
-import com.maze.domain.GameState;
-import com.maze.domain.MazeCellState;
-import com.maze.domain.MazeLevelProfile;
-import com.maze.domain.MazePoint;
+import com.game.domain.Direction;
+import com.game.domain.GameState;
+import com.game.domain.MazeCellState;
+import com.game.domain.MazeLevelProfile;
+import com.game.domain.MazePoint;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;

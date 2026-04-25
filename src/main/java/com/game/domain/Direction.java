@@ -1,4 +1,4 @@
-package com.maze.domain;
+package com.game.domain;
 
 public enum Direction {
     UP(0, -1),

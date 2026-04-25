@@ -1,16 +1,16 @@
-package com.maze.service;
+package com.game.service;
 
-import com.maze.domain.Direction;
-import com.maze.domain.GameState;
-import com.maze.domain.MazeCellState;
-import com.maze.domain.MazeLevelProfile;
-import com.maze.domain.Player;
-import com.maze.domain.PlayerId;
-import com.maze.generator.MazeGenerator;
-import com.maze.generator.RecursiveBacktrackGenerator;
-import com.maze.strategy.ChaseModeStrategy;
-import com.maze.strategy.GameModeStrategy;
-import com.maze.strategy.TwinRaceStrategy;
+import com.game.domain.Direction;
+import com.game.domain.GameState;
+import com.game.domain.MazeCellState;
+import com.game.domain.MazeLevelProfile;
+import com.game.domain.Player;
+import com.game.domain.PlayerId;
+import com.game.generator.MazeGenerator;
+import com.game.generator.RecursiveBacktrackGenerator;
+import com.game.strategy.ChaseModeStrategy;
+import com.game.strategy.GameModeStrategy;
+import com.game.strategy.TwinRaceStrategy;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
-public class MazeService {
+public class GameService {
     public static final String MODE_TWIN_RACE = "TWIN_RACE";
     public static final String MODE_CHASE = "CHASE";
     private static final int CHASE_FIXED_LOGICAL_SIZE = 19;
@@ -46,7 +46,7 @@ public class MazeService {
     private final GameModeStrategy twinRaceStrategy;
     private final GameModeStrategy chaseModeStrategy;
 
-    public MazeService() {
+    public GameService() {
         this.mazeGenerator = new RecursiveBacktrackGenerator();
         this.twinRaceStrategy = new TwinRaceStrategy();
         this.chaseModeStrategy = new ChaseModeStrategy();

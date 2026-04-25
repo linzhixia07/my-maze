@@ -1,7 +1,7 @@
-package com.maze.generator;
+package com.game.generator;
 
-import com.maze.domain.GameState;
-import com.maze.domain.MazeLevelProfile;
+import com.game.domain.GameState;
+import com.game.domain.MazeLevelProfile;
 
 /**
  * 迷宫生成器接口

@@ -1,12 +1,12 @@
-package com.maze;
+package com.game;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class MazeApplication {
+public class GameApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(MazeApplication.class, args);
+        SpringApplication.run(GameApplication.class, args);
     }
 }

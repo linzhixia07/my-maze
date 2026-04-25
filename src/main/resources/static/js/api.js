@@ -6,7 +6,7 @@ const ApiService = {
      * 生成迷宫
      */
     generateMaze(level, gameMode) {
-        return fetch("/api/maze/generate", {
+        return fetch("/api/game/generate", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
@@ -20,7 +20,7 @@ const ApiService = {
      * 移动玩家
      */
     move(action, currentGameMode, chaseChaserPlayerId) {
-        return fetch("/api/maze/move", {
+        return fetch("/api/game/move", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
@@ -29,6 +29,19 @@ const ApiService = {
                 chaseChaserId: currentGameMode === GameConfig.MODE_CHASE ? chaseChaserPlayerId : null
             })
         }).then(this.parseJson);
+    },
+
+    /**
+     * 加载记忆配对词库
+     */
+    loadMemoryVocabulary() {
+        return fetch("/api/game/vocabulary", {cache: "no-store"})
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error("request failed");
+                }
+                return response.text();
+            });
     },
 
     /**

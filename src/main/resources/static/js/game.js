@@ -453,9 +453,7 @@ const Game = {
     },
 
     async loadVocabulary() {
-        const response = await fetch("/dict.txt", {cache: "no-store"});
-        if (!response.ok) throw new Error("dict fetch failed");
-        const content = await response.text();
+        const content = await ApiService.loadMemoryVocabulary();
         const words = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
         this.vocabulary = words.length >= 12 ? words : this.getFallbackVocabulary();
     },

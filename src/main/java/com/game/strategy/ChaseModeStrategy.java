@@ -1,8 +1,8 @@
-package com.maze.strategy;
+package com.game.strategy;
 
-import com.maze.domain.GameState;
-import com.maze.domain.Player;
-import com.maze.domain.PlayerId;
+import com.game.domain.GameState;
+import com.game.domain.Player;
+import com.game.domain.PlayerId;
 
 /**
  * 抓人模式：

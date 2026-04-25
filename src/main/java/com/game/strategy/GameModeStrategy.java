@@ -1,7 +1,7 @@
-package com.maze.strategy;
+package com.game.strategy;
 
-import com.maze.domain.GameState;
-import com.maze.domain.PlayerId;
+import com.game.domain.GameState;
+import com.game.domain.PlayerId;
 
 /**
  * 游戏模式策略接口

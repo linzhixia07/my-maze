@@ -1,11 +1,15 @@
-package com.maze.web;
+package com.game.web;
 
-import com.maze.domain.Direction;
-import com.maze.domain.GameState;
-import com.maze.domain.MazePoint;
-import com.maze.domain.PlayerId;
-import com.maze.service.MazeService;
+import com.game.domain.Direction;
+import com.game.domain.GameState;
+import com.game.domain.MazePoint;
+import com.game.domain.PlayerId;
+import com.game.service.GameService;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.util.StreamUtils;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,44 +17,46 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.servlet.http.HttpSession;
-import java.util.Map;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/maze")
-public class MazeController {
+@RequestMapping("/api/game")
+public class GameController {
     private static final String SESSION_KEY = "maze-state";
     private static final String SESSION_LEVEL_KEY = "maze-level";
     private static final String SESSION_MODE_KEY = "maze-mode";
-    private final MazeService mazeService;
+    private final GameService gameService;
 
-    public MazeController(MazeService mazeService) {
-        this.mazeService = mazeService;
+    public GameController(GameService gameService) {
+        this.gameService = gameService;
     }
 
     @PostMapping("/generate")
-    public MazeResponse generate(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
+    public GameResponse generate(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
         return reset(request, session);
     }
 
     @PostMapping("/reset")
-    public MazeResponse reset(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
+    public GameResponse reset(@RequestBody(required = false) GenerateRequest request, HttpSession session) {
         Integer cols = request == null ? null : request.getCols();
         Integer rows = request == null ? null : request.getRows();
         Integer level = request == null ? null : request.getLevel();
         String gameMode = request == null ? null : request.getGameMode();
         String appliedMode = normalizeGameMode(gameMode);
-        GameState state = mazeService.generate(cols, rows, level, appliedMode);
-        int appliedLevel = MazeService.MODE_CHASE.equals(appliedMode) ? 1 : mazeService.clampLevel(level);
+        GameState state = gameService.generate(cols, rows, level, appliedMode);
+        int appliedLevel = GameService.MODE_CHASE.equals(appliedMode) ? 1 : gameService.clampLevel(level);
         session.setAttribute(SESSION_KEY, state);
         session.setAttribute(SESSION_LEVEL_KEY, appliedLevel);
         session.setAttribute(SESSION_MODE_KEY, appliedMode);
-        return MazeResponse.from(state, true, true, null, appliedLevel, appliedMode);
+        return GameResponse.from(state, true, true, null, appliedLevel, appliedMode);
     }
 
     @PostMapping("/move")
-    public MazeResponse move(@RequestBody MoveRequest request, HttpSession session) {
+    public GameResponse move(@RequestBody MoveRequest request, HttpSession session) {
         GameState state = (GameState) session.getAttribute(SESSION_KEY);
         if (state == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please generate maze first.");
@@ -65,12 +71,18 @@ public class MazeController {
         try {
             String gameMode = (String) session.getAttribute(SESSION_MODE_KEY);
             String appliedMode = normalizeGameMode(gameMode);
-            MazeService.MoveResult moveResult = mazeService.tryMove(state, playerId, direction, appliedMode, chaseChaserId);
+            GameService.MoveResult moveResult = gameService.tryMove(state, playerId, direction, appliedMode, chaseChaserId);
             Integer appliedLevel = (Integer) session.getAttribute(SESSION_LEVEL_KEY);
-            return MazeResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner(), appliedLevel, appliedMode);
+            return GameResponse.from(state, moveResult.isMoved(), false, moveResult.getWinner(), appliedLevel, appliedMode);
         } finally {
             state.getLock().unlock();
         }
+    }
+
+    @GetMapping(value = "/vocabulary", produces = MediaType.TEXT_PLAIN_VALUE)
+    public String vocabulary() throws IOException {
+        ClassPathResource resource = new ClassPathResource("config/dict.txt");
+        return StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
     }
 
     private Direction parseDirection(String value) {
@@ -91,13 +103,13 @@ public class MazeController {
 
     private String normalizeGameMode(String value) {
         if (value == null) {
-            return MazeService.MODE_TWIN_RACE;
+            return GameService.MODE_TWIN_RACE;
         }
         String normalized = value.trim().toUpperCase();
-        if (MazeService.MODE_CHASE.equals(normalized)) {
-            return MazeService.MODE_CHASE;
+        if (GameService.MODE_CHASE.equals(normalized)) {
+            return GameService.MODE_CHASE;
         }
-        return MazeService.MODE_TWIN_RACE;
+        return GameService.MODE_TWIN_RACE;
     }
 
     public static class GenerateRequest {
@@ -169,7 +181,7 @@ public class MazeController {
         }
     }
 
-    public static class MazeResponse {
+    public static class GameResponse {
         private int[][] maze;
         private Map<String, PointDto> players;
         private PointDto goal;
@@ -180,9 +192,9 @@ public class MazeController {
         private int level;
         private String gameMode;
 
-        public static MazeResponse from(GameState state, boolean moved, boolean includeMaze, PlayerId winnerId,
+        public static GameResponse from(GameState state, boolean moved, boolean includeMaze, PlayerId winnerId,
                                         Integer level, String gameMode) {
-            MazeResponse response = new MazeResponse();
+            GameResponse response = new GameResponse();
             response.maze = includeMaze ? state.getMaze() : null;
             response.goal = new PointDto(state.getGoal().getX(), state.getGoal().getY());
             response.players = state.getPlayers().entrySet().stream()
@@ -196,8 +208,8 @@ public class MazeController {
             response.gameOver = state.isGameOver();
             response.winner = winnerId == null && state.getWinner() != null ? state.getWinner().name()
                     : winnerId == null ? null : winnerId.name();
-            response.level = level == null ? MazeService.DEFAULT_LEVEL : level;
-            response.gameMode = gameMode == null ? MazeService.MODE_TWIN_RACE : gameMode;
+            response.level = level == null ? GameService.DEFAULT_LEVEL : level;
+            response.gameMode = gameMode == null ? GameService.MODE_TWIN_RACE : gameMode;
             return response;
         }
 
