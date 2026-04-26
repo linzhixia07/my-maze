@@ -34,8 +34,4 @@ public class ChaseModeStrategy implements GameModeStrategy {
         return null;
     }
 
-    @Override
-    public String getModeName() {
-        return "CHASE";
-    }
 }

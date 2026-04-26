@@ -65,7 +65,7 @@ public class MemoryService {
         card.setFlipped(true);
         state.getFlippedIndices().add(index);
         if (state.getFlippedIndices().size() < 2) {
-            return TurnResult.firstFlip();
+            return TurnResult.noop();
         }
 
         int firstIndex = state.getFlippedIndices().get(0);
@@ -88,7 +88,7 @@ public class MemoryService {
             state.getFlippedIndices().clear();
             switchPlayer(state);
             finishIfNeeded(state);
-            return TurnResult.match();
+            return TurnResult.noop();
         }
 
         state.setPendingResolve(true);
@@ -171,32 +171,18 @@ public class MemoryService {
     }
 
     public static class TurnResult {
-        private final boolean changed;
         private final boolean mismatchNeedsResolve;
 
-        private TurnResult(boolean changed, boolean mismatchNeedsResolve) {
-            this.changed = changed;
+        private TurnResult(boolean mismatchNeedsResolve) {
             this.mismatchNeedsResolve = mismatchNeedsResolve;
         }
 
         public static TurnResult noop() {
-            return new TurnResult(false, false);
-        }
-
-        public static TurnResult firstFlip() {
-            return new TurnResult(true, false);
-        }
-
-        public static TurnResult match() {
-            return new TurnResult(true, false);
+            return new TurnResult(false);
         }
 
         public static TurnResult mismatch() {
-            return new TurnResult(true, true);
-        }
-
-        public boolean isChanged() {
-            return changed;
+            return new TurnResult(true);
         }
 
         public boolean isMismatchNeedsResolve() {

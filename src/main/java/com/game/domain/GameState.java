@@ -72,20 +72,22 @@ public class GameState {
         return winner;
     }
 
-    public void markVisited(PlayerId playerId, int x, int y) {
+    private void markVisited(PlayerId playerId, int x, int y) {
         maze[y][x] = maze[y][x] | MazeCellState.VISITED;
         breadcrumbs.get(playerId).add(new MazePoint(x, y));
     }
 
-    public void movePlayer(PlayerId playerId, int x, int y) {
+    public void movePlayer(PlayerId playerId, int x, int y, boolean recordBreadcrumb) {
         players.get(playerId).moveTo(x, y);
-        markVisited(playerId, x, y);
+        maze[y][x] = maze[y][x] | MazeCellState.VISITED;
+        if (recordBreadcrumb) {
+            breadcrumbs.get(playerId).add(new MazePoint(x, y));
+        }
     }
 
-    public boolean isOccupiedByOther(PlayerId playerId, int x, int y) {
-        PlayerId other = playerId == PlayerId.A ? PlayerId.B : PlayerId.A;
-        Player otherPlayer = players.get(other);
-        return otherPlayer.getX() == x && otherPlayer.getY() == y;
+    public void clearBreadcrumbs() {
+        breadcrumbs.get(PlayerId.A).clear();
+        breadcrumbs.get(PlayerId.B).clear();
     }
 
     public void setWinner(PlayerId winner) {

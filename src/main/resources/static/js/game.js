@@ -449,7 +449,6 @@ const Game = {
         this.winnerMessage = state.gameOver && state.winner ? this.getWinnerMessage(state.winner) : "";
         this.applyMemoryGridSize();
         this.renderMemoryBoard();
-        this.applyLevelTheme(1);
         this.elements.canvas.classList.add("hidden");
     },
 

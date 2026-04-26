@@ -19,9 +19,4 @@ public interface GameModeStrategy {
      * @return 获胜者，如果游戏未结束返回 null
      */
     PlayerId checkWinner(GameState state, PlayerId playerId, int nextX, int nextY, PlayerId chaserId);
-
-    /**
-     * 获取模式名称
-     */
-    String getModeName();
 }

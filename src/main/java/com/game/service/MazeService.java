@@ -66,21 +66,15 @@ public class MazeService {
         return value;
     }
 
-    public GameState generate(Integer requestedCols, Integer requestedRows) {
-        return generate(requestedCols, requestedRows, null, MODE_TWIN_RACE);
-    }
-
-    public GameState generate(Integer requestedCols, Integer requestedRows, Integer level) {
-        return generate(requestedCols, requestedRows, level, MODE_TWIN_RACE);
-    }
-
     public GameState generate(Integer requestedCols, Integer requestedRows, Integer level, String gameMode) {
         String resolvedMode = normalizeGameMode(gameMode);
 
         if (MODE_CHASE.equals(resolvedMode)) {
             MazeLevelProfile chaseProfile = LEVEL_PROFILES_BY_NUMBER.get(DEFAULT_LEVEL)
                     .withLogicalGrid(CHASE_FIXED_LOGICAL_SIZE, CHASE_FIXED_LOGICAL_SIZE);
-            return mazeGenerator.generateChaseMaze(chaseProfile);
+            GameState chaseState = mazeGenerator.generateChaseMaze(chaseProfile);
+            chaseState.clearBreadcrumbs();
+            return chaseState;
         }
 
         int resolvedLevel;
@@ -97,14 +91,6 @@ public class MazeService {
 
         int wideCorridorBudget = getWideCorridorBudget(resolvedLevel);
         return mazeGenerator.generateRaceMaze(profile, wideCorridorBudget);
-    }
-
-    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction) {
-        return tryMove(state, playerId, direction, MODE_TWIN_RACE, null);
-    }
-
-    public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction, String gameMode) {
-        return tryMove(state, playerId, direction, gameMode, null);
     }
 
     public MoveResult tryMove(GameState state, PlayerId playerId, Direction direction, String gameMode, PlayerId chaseChaserId) {
@@ -126,7 +112,7 @@ public class MazeService {
             return new MoveResult(false, state.isGameOver(), state.getWinner());
         }
 
-        state.movePlayer(playerId, nextX, nextY);
+        state.movePlayer(playerId, nextX, nextY, !MODE_CHASE.equals(resolvedMode));
 
         GameModeStrategy strategy = MODE_CHASE.equals(resolvedMode) ? chaseModeStrategy : twinRaceStrategy;
         PlayerId winner = strategy.checkWinner(state, playerId, nextX, nextY, chaseChaserId);

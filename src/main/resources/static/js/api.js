@@ -31,29 +31,12 @@ const ApiService = {
         }).then(this.parseJson);
     },
 
-    /**
-     * 加载记忆配对词库
-     */
-    loadMemoryVocabulary() {
-        return fetch("/api/game/vocabulary", {cache: "no-store"})
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error("request failed");
-                }
-                return response.text();
-            });
-    },
-
     startMemoryGame(rows, cols) {
         return fetch("/api/game/memory/start", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({rows: rows, cols: cols})
         }).then(this.parseJson);
-    },
-
-    getMemoryState() {
-        return fetch("/api/game/memory/state", {cache: "no-store"}).then(this.parseJson);
     },
 
     flipMemoryCard(index) {

@@ -16,8 +16,4 @@ public class TwinRaceStrategy implements GameModeStrategy {
         return null;
     }
 
-    @Override
-    public String getModeName() {
-        return "TWIN_RACE";
-    }
 }
