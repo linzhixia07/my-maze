@@ -1,25 +1,29 @@
-Apple
-Cat
-Dog
-Sun
-Book
-Fish
-Tree
-Milk
-Bird
-Cake
-Ball
-Star
-Moon
-Hand
-Duck
-Bear
-Lion
-Frog
-Ship
-Leaf
-Rain
-Cloud
-Smile
-Bread
-Flower
+fourteen
+an elephant
+a panda
+a giraffe
+a tiger
+a hippo
+a monkey
+a snake
+animals
+a blouse
+a vest
+shorts
+a T-shirt
+a jacket
+socks
+tidying
+sleeping
+reading
+talking
+singing
+carrying
+drinking
+playing
+eating
+drawing
+a slide
+the grass
+grey
+a dinosaur

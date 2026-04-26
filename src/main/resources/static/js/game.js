@@ -468,7 +468,8 @@ const Game = {
             button.disabled = card.matched;
             const cardColor = card.matched ? this.getWordColor(card.word) : this.getUnmatchedFlipColor();
             const cardBorder = card.matched ? this.getWordBorderColor(card.word) : this.getUnmatchedFlipBorderColor();
-            button.innerHTML = "<div class=\"memory-card-inner\"><div class=\"memory-card-face memory-card-back\">?</div><div class=\"memory-card-face memory-card-front\" style=\"background:" + cardColor + ";border-color:" + cardBorder + ";\">" + card.word + "</div></div>";
+            const wordFontSize = this.getMemoryWordFontSize(card.word);
+            button.innerHTML = "<div class=\"memory-card-inner\"><div class=\"memory-card-face memory-card-back\">?</div><div class=\"memory-card-face memory-card-front\" style=\"background:" + cardColor + ";border-color:" + cardBorder + ";\"><span class=\"memory-card-word\" data-base-font-size=\"" + wordFontSize + "\" style=\"font-size:" + wordFontSize + "px;\">" + card.word + "</span></div></div>";
             button.addEventListener("click", () => this.onMemoryCardClick(i));
             board.appendChild(button);
         }
@@ -482,6 +483,7 @@ const Game = {
 
         this.updateScoreDisplay();
         this.applyLevelTheme(1);
+        this.fitMemoryCardWords();
     },
 
     onMemoryCardClick(index) {
@@ -533,9 +535,42 @@ const Game = {
         return "#b8d6f2";
     },
 
+    getMemoryWordFontSize(word) {
+        const lettersOnlyCount = (word || "").replace(/[^a-zA-Z]/g, "").length;
+        if (lettersOnlyCount <= 6) return 22;
+        if (lettersOnlyCount <= 8) return 20;
+        if (lettersOnlyCount <= 10) return 18;
+        if (lettersOnlyCount <= 12) return 16;
+        return 14;
+    },
+
+    fitMemoryCardWords() {
+        const wordNodes = this.elements.memoryBoard.querySelectorAll(".memory-card-word");
+        for (let i = 0; i < wordNodes.length; i++) {
+            this.fitSingleMemoryWord(wordNodes[i]);
+        }
+    },
+
+    fitSingleMemoryWord(wordNode) {
+        if (!wordNode) return;
+        const frontFace = wordNode.closest(".memory-card-front");
+        if (!frontFace) return;
+
+        const baseSize = Number(wordNode.dataset.baseFontSize) || 16;
+        let fontSize = baseSize;
+        const minFontSize = 9;
+        const safetyGap = 2;
+        wordNode.style.fontSize = fontSize + "px";
+
+        while (fontSize > minFontSize && wordNode.scrollWidth > (frontFace.clientWidth - safetyGap)) {
+            fontSize -= 1;
+            wordNode.style.fontSize = fontSize + "px";
+        }
+    },
+
     applyMemoryGridSize() {
-        this.elements.memoryBoard.style.gridTemplateRows = "repeat(" + this.memoryRows + ", minmax(102px, 1fr))";
-        this.elements.memoryBoard.style.gridTemplateColumns = "repeat(" + this.memoryCols + ", minmax(96px, 1fr))";
+        this.elements.memoryBoard.style.gridTemplateRows = "repeat(" + this.memoryRows + ", minmax(126px, 1fr))";
+        this.elements.memoryBoard.style.gridTemplateColumns = "repeat(" + this.memoryCols + ", minmax(120px, 1fr))";
     },
 
     showMemorySizeDialog() {

@@ -11,9 +11,9 @@
     </parent>
 
     <groupId>com.maze</groupId>
-    <artifactId>my-maze</artifactId>
+    <artifactId>my-amazing-game</artifactId>
     <version>1.0.0</version>
-    <name>my-maze</name>
+    <name>my-amazing-game</name>
     <description>Kid-friendly maze game</description>
 
     <properties>

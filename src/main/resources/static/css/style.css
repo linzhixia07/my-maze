@@ -103,8 +103,8 @@ canvas {
     max-width: 860px;
     min-height: 560px;
     display: grid;
-    grid-template-columns: repeat(6, minmax(96px, 1fr));
-    grid-template-rows: repeat(4, minmax(118px, 1fr));
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+    grid-template-rows: repeat(4, minmax(126px, 1fr));
     gap: 12px;
     margin: 0 auto;
     padding: 16px;
@@ -165,8 +165,18 @@ canvas {
     color: #1f2933;
     background: #fffaf0;
     border: 2px solid #efd9b0;
-    font-size: clamp(20px, 2.2vw, 28px);
     letter-spacing: 0.02em;
+    line-height: 1.1;
+    padding: 0 10px;
+    box-sizing: border-box;
+}
+
+.memory-card-word {
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
 }
 
 .memory-card.is-matched .memory-card-front {

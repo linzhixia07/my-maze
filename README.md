@@ -1,4 +1,4 @@
-# my-maze
+# my-amazing-game
 
 一个面向 6-7 岁儿童的 Web 迷宫游戏：
 - 后端：Spring Boot (Java 8)
@@ -9,7 +9,7 @@
 
 ```bash
 mvn clean package
-java -jar target/my-maze-1.0.0.jar
+java -jar target/my-amazing-game-1.0.0.jar
 ```
 
 启动后访问：`http://localhost:8080`
